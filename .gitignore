@@ -1,0 +1,14 @@
+# IDE and local agent state
+.idea/
+.omx/
+
+# macOS
+.DS_Store
+
+# Local credentials and environment variables
+.aws/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
