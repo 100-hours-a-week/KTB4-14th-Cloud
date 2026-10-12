@@ -1,0 +1,77 @@
+name: AI Release PR Verify
+
+# Release PR(chore/release-* → main)의 Release 파일이 실제 ECR 이미지를 가리키는지 검증한다.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - releases/ai.yml
+
+concurrency:
+  group: ai-release-verify-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Release 브랜치 이름 확인
+        if: ${{ !startsWith(github.head_ref, 'chore/release-') }}
+        run: |
+          echo "::error::Release PR은 chore/release-* 브랜치에서만 생성할 수 있습니다. (현재: ${{ github.head_ref }})"
+          exit 1
+
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Release 파일 형식 검증
+        id: release
+        run: |
+          VERSION=$(yq -r '.version' releases/ai.yml)
+          COMMIT_SHA=$(yq -r '.commit_sha' releases/ai.yml)
+          DIGEST=$(yq -r '.image_digest' releases/ai.yml)
+
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::version 형식 오류: $VERSION"; exit 1; }
+          [[ "$COMMIT_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::commit_sha는 40자리 SHA여야 합니다: $COMMIT_SHA"; exit 1; }
+          [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::image_digest 형식 오류: $DIGEST"; exit 1; }
+
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "tag=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: GitHub OIDC로 AWS 인증
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: ai-release-verify-${{ github.run_id }}
+
+      - name: ECR 이미지 존재 및 버전·Commit 일치 확인
+        env:
+          DIGEST: ${{ steps.release.outputs.digest }}
+          EXPECTED_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          # Digest가 ECR에 없으면 실패
+          TAGS=$(aws ecr describe-images \
+            --repository-name "${{ vars.ECR_MOCK_AI_REPOSITORY }}" \
+            --image-ids imageDigest="$DIGEST" \
+            --query 'imageDetails[0].imageTags' --output text)
+
+          # AI CD가 붙인 버전 태그가 이 Digest에 달려 있어야 Release 파일의 값이 서로 일치
+          if ! tr '\t' '\n' <<<"$TAGS" | grep -qx "$EXPECTED_TAG"; then
+            echo "::error::Digest ${DIGEST}에 태그 ${EXPECTED_TAG}가 없습니다. (현재 태그: ${TAGS})"
+            exit 1
+          fi
+
+          {
+            echo "## AI Release 검증 통과"
+            echo "- Tag: \`${EXPECTED_TAG}\`"
+            echo "- Digest: \`${DIGEST}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

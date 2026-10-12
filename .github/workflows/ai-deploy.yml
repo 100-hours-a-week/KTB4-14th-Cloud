@@ -1,0 +1,235 @@
+name: AI Worker Production Deploy
+
+# Release PR이 main에 병합되면 Release 파일에 지정된 이미지를 재빌드 없이 배포한다.
+#
+# 신규 Task Definition 등록·ECS Service 업데이트
+# → 신규 Worker 실행·준비 상태 확인
+# → 활성 Worker Version 전환 (SSM Parameter)
+# → 기존 Worker 신규 메시지 수신 중단 ─┐
+# → 기존 Worker 진행 중 작업 완료       │ Worker 코드가 수행
+# → 결과 저장·결과 Queue 전송 성공 확인  │ (Task Protection으로 ECS의 종료를 보류)
+# → 요청 메시지 삭제                    │
+# → Task Protection 해제 ──────────────┘
+# → 기존 Worker 종료 (ECS)
+# → ECS 안정화·목표 버전 확인
+on:
+  push:
+    branches: [main]
+    paths:
+      - releases/ai.yml
+
+concurrency:
+  # 운영 배포는 한 번에 하나만 실행하며 진행 중인 배포(드레이닝 포함)를 취소하지 않음
+  group: ai-production-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    # 오래 걸리는 AI 작업의 드레이닝 대기를 포함
+    timeout-minutes: 180
+    environment: production
+
+    env:
+      CLUSTER: ${{ vars.ECS_CLUSTER }}
+      SERVICE: ${{ vars.ECS_AI_SERVICE }}
+      ACTIVE_VERSION_PARAM: ${{ vars.AI_ACTIVE_VERSION_PARAM }} # 예: /audigo/prod/ai/active-worker-version
+      READY_TIMEOUT_MINUTES: ${{ vars.AI_READY_TIMEOUT_MINUTES || '15' }}
+      DRAIN_TIMEOUT_MINUTES: ${{ vars.AI_DRAIN_TIMEOUT_MINUTES || '150' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Release 파일 읽기
+        id: release
+        run: |
+          VERSION=$(yq -r '.version' releases/ai.yml)
+          COMMIT_SHA=$(yq -r '.commit_sha' releases/ai.yml)
+          DIGEST=$(yq -r '.image_digest' releases/ai.yml)
+          [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::image_digest 형식 오류: $DIGEST"; exit 1; }
+
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "commit_sha=${COMMIT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+          # Worker가 자신의 버전과 활성 버전을 비교할 때 쓰는 식별자
+          echo "worker_version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: GitHub OIDC로 AWS 인증
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: ai-deploy-${{ github.run_id }}
+
+      - name: 배포 대상 이미지 확인 (Digest 고정)
+        id: image
+        env:
+          DIGEST: ${{ steps.release.outputs.digest }}
+        run: |
+          REPOSITORY_URI=$(aws ecr describe-repositories \
+            --repository-names "${{ vars.ECR_MOCK_AI_REPOSITORY }}" \
+            --query 'repositories[0].repositoryUri' --output text)
+          # Digest가 ECR에 없으면 여기서 실패
+          aws ecr describe-images --repository-name "${{ vars.ECR_MOCK_AI_REPOSITORY }}" \
+            --image-ids imageDigest="$DIGEST" > /dev/null
+          echo "uri=${REPOSITORY_URI}@${DIGEST}" >> "$GITHUB_OUTPUT"
+
+      - name: 현재 활성 Worker Version 기록
+        id: previous
+        run: |
+          PREV=$(aws ssm get-parameter --name "$ACTIVE_VERSION_PARAM" \
+            --query 'Parameter.Value' --output text 2>/dev/null || echo "none")
+          echo "version=${PREV}" >> "$GITHUB_OUTPUT"
+          echo "이전 활성 Worker Version: ${PREV}"
+
+      - name: Task Definition에 신규 이미지 반영
+        id: task-definition
+        # Task Definition Family의 최신 Revision을 가져와 지정 Container의 Image와 버전 환경변수만 변경
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition-family: ${{ vars.ECS_AI_TASK_DEFINITION_FAMILY }}
+          container-name: ${{ vars.ECS_AI_CONTAINER_NAME }}
+          image: ${{ steps.image.outputs.uri }}
+          environment-variables: |
+            WORKER_VERSION=${{ steps.release.outputs.worker_version }}
+
+      - name: 신규 Task Definition 등록·ECS Service 업데이트
+        id: deploy
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.task-definition.outputs.task-definition }}
+          cluster: ${{ vars.ECS_CLUSTER }}
+          service: ${{ vars.ECS_AI_SERVICE }}
+          # 드레이닝을 직접 제어하므로 여기서는 안정화를 기다리지 않음
+          wait-for-service-stability: false
+
+      - name: 신규 Worker 실행·준비 상태 확인
+        env:
+          NEW_TD: ${{ steps.deploy.outputs.task-definition-arn }}
+        run: |
+          deadline=$((SECONDS + READY_TIMEOUT_MINUTES * 60))
+          while :; do
+            SVC=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" --query 'services[0]')
+            DESIRED=$(jq -r '.desiredCount' <<<"$SVC")
+            ROLLOUT=$(jq -r --arg td "$NEW_TD" '.deployments[] | select(.taskDefinition == $td) | .rolloutState' <<<"$SVC")
+
+            if [ "$ROLLOUT" = "FAILED" ]; then
+              echo "::error::신규 Worker 배포 실패 (Deployment Circuit Breaker). 활성 버전은 전환하지 않았습니다."
+              exit 1
+            fi
+
+            TASKS=$(aws ecs list-tasks --cluster "$CLUSTER" --service-name "$SERVICE" \
+              --desired-status RUNNING --query 'taskArns' --output text)
+            READY=0
+            if [ -n "$TASKS" ] && [ "$TASKS" != "None" ]; then
+              # Container Health Check가 HEALTHY인 신규 Task만 준비 완료로 간주
+              READY=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks $TASKS \
+                --query "length(tasks[?taskDefinitionArn=='${NEW_TD}' && lastStatus=='RUNNING' && healthStatus=='HEALTHY'])" \
+                --output text)
+            fi
+
+            echo "신규 Worker 준비: ${READY}/${DESIRED}"
+            [ "$READY" -ge "$DESIRED" ] && break
+
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "::error::신규 Worker 준비 시간 초과 (${READY_TIMEOUT_MINUTES}분). 활성 버전은 전환하지 않았습니다."
+              exit 1
+            fi
+            sleep 15
+          done
+
+      - name: 활성 Worker Version 전환
+        env:
+          WORKER_VERSION: ${{ steps.release.outputs.worker_version }}
+        run: |
+          # 기존 Worker는 이 값이 자신의 WORKER_VERSION과 다르면 신규 메시지 수신을 중단한다.
+          aws ssm put-parameter --name "$ACTIVE_VERSION_PARAM" \
+            --value "$WORKER_VERSION" --type String --overwrite > /dev/null
+          echo "활성 Worker Version → ${WORKER_VERSION}"
+
+      - name: 기존 Worker 드레이닝 대기 (진행 중 작업 완료 → Task Protection 해제 → 종료)
+        env:
+          NEW_TD: ${{ steps.deploy.outputs.task-definition-arn }}
+        run: |
+          deadline=$((SECONDS + DRAIN_TIMEOUT_MINUTES * 60))
+          while :; do
+            SVC=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" --query 'services[0]')
+            DEPLOYMENTS=$(jq '.deployments | length' <<<"$SVC")
+            PRIMARY_STATE=$(jq -r '.deployments[] | select(.status == "PRIMARY") | .rolloutState' <<<"$SVC")
+
+            # 기존 Deployment가 모두 사라지고 PRIMARY가 COMPLETED면 드레이닝 완료
+            if [ "$DEPLOYMENTS" = "1" ] && [ "$PRIMARY_STATE" = "COMPLETED" ]; then
+              echo "기존 Worker 종료 완료"
+              break
+            fi
+
+            TASKS=$(aws ecs list-tasks --cluster "$CLUSTER" --service-name "$SERVICE" \
+              --desired-status RUNNING --query 'taskArns' --output text)
+            OLD_TASKS=""
+            if [ -n "$TASKS" ] && [ "$TASKS" != "None" ]; then
+              OLD_TASKS=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks $TASKS \
+                --query "tasks[?taskDefinitionArn!='${NEW_TD}'].taskArn" --output text)
+            fi
+
+            if [ -n "$OLD_TASKS" ] && [ "$OLD_TASKS" != "None" ]; then
+              PROTECTED=$(aws ecs get-task-protection --cluster "$CLUSTER" --tasks $OLD_TASKS \
+                --query 'length(protectedTasks[?protectionEnabled])' --output text)
+              echo "기존 Worker $(wc -w <<<"$OLD_TASKS")개 남음 (작업 중·Task Protection 활성: ${PROTECTED}개)"
+            else
+              echo "기존 Worker 종료 대기 중 (Deployment ${DEPLOYMENTS}개, PRIMARY=${PRIMARY_STATE})"
+            fi
+
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "::error::드레이닝 시간 초과 (${DRAIN_TIMEOUT_MINUTES}분). 기존 Worker의 작업 상태를 확인하세요."
+              exit 1
+            fi
+            sleep 30
+          done
+
+      - name: ECS 안정화·목표 버전 확인
+        env:
+          NEW_TD: ${{ steps.deploy.outputs.task-definition-arn }}
+          WORKER_VERSION: ${{ steps.release.outputs.worker_version }}
+        run: |
+          aws ecs wait services-stable --cluster "$CLUSTER" --services "$SERVICE"
+
+          SVC=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" --query 'services[0]')
+          CURRENT_TD=$(jq -r '.taskDefinition' <<<"$SVC")
+          DESIRED=$(jq -r '.desiredCount' <<<"$SVC")
+          TASKS=$(aws ecs list-tasks --cluster "$CLUSTER" --service-name "$SERVICE" \
+            --desired-status RUNNING --query 'taskArns' --output text)
+          ON_TARGET=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks $TASKS \
+            --query "length(tasks[?taskDefinitionArn=='${NEW_TD}'])" --output text)
+          ACTIVE=$(aws ssm get-parameter --name "$ACTIVE_VERSION_PARAM" --query 'Parameter.Value' --output text)
+
+          [ "$CURRENT_TD" = "$NEW_TD" ] || { echo "::error::Service Task Definition 불일치: ${CURRENT_TD}"; exit 1; }
+          [ "$ON_TARGET" = "$DESIRED" ] || { echo "::error::목표 버전 Task 수 불일치: ${ON_TARGET}/${DESIRED}"; exit 1; }
+          [ "$ACTIVE" = "$WORKER_VERSION" ] || { echo "::error::활성 Worker Version 불일치: ${ACTIVE}"; exit 1; }
+
+      - name: 배포 결과 게시
+        if: always()
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          COMMIT_SHA: ${{ steps.release.outputs.commit_sha }}
+          IMAGE_URI: ${{ steps.image.outputs.uri }}
+          NEW_TD: ${{ steps.deploy.outputs.task-definition-arn }}
+          PREV_VERSION: ${{ steps.previous.outputs.version }}
+        run: |
+          {
+            echo "## AI Worker 배포 결과: ${{ job.status }}"
+            echo
+            echo "| 항목 | 값 |"
+            echo "|---|---|"
+            echo "| AI Version | \`${VERSION}\` |"
+            echo "| Commit SHA | \`${COMMIT_SHA}\` |"
+            echo "| Image | \`${IMAGE_URI}\` |"
+            echo "| Task Definition | \`${NEW_TD}\` |"
+            echo "| 이전 활성 Worker Version | \`${PREV_VERSION}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
