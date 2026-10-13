@@ -1,0 +1,189 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Audigo 공통 기존 VPC 네트워크의 최초 편입 전용 템플릿입니다.
+  이미 존재하는 리소스이므로 일반 생성(CREATE)이 아닌 가져오기(IMPORT) 방식으로 사용하세요.
+
+# 작성 기준: 2026-10-13 IaC 생성기 스냅샷입니다. IMPORT 변경 세트를 실행하기 전에
+# 실제 AWS 리소스의 속성과 현재 관리 스택을 확인하세요.
+# 기존 인터넷 게이트웨이 연결, 서브넷과 라우팅 테이블 연결, 0.0.0.0/0 경로,
+# 메인 라우팅 테이블, 네트워크 ACL 및 S3 엔드포인트는 이 템플릿에서 변경하지 않습니다.
+Resources:
+  AudigoVpc:
+    Type: AWS::EC2::VPC
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      InstanceTenancy: default
+      Tags:
+        - Key: Name
+          Value: audigo-vpc
+        - Key: service
+          Value: audigo
+
+  PublicSubnet2a:
+    Type: AWS::EC2::Subnet
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    # 기존 편입 서브넷의 AZ를 유지하므로 AZ 고정 경고만 제외합니다.
+    Metadata:
+      cfn-lint:
+        config:
+          ignore_checks:
+            - W3010
+    Properties:
+      VpcId: !Ref AudigoVpc
+      CidrBlock: 10.0.0.0/20
+      AvailabilityZone: ap-northeast-2a
+      MapPublicIpOnLaunch: false
+      EnableDns64: false
+      Ipv6Native: false
+      Tags:
+        - Key: Name
+          Value: audigo-prd-pub-2a
+        - Key: service
+          Value: audigo
+
+  PublicSubnet2b:
+    Type: AWS::EC2::Subnet
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    # 기존 편입 서브넷의 AZ를 유지하므로 AZ 고정 경고만 제외합니다.
+    Metadata:
+      cfn-lint:
+        config:
+          ignore_checks:
+            - W3010
+    Properties:
+      VpcId: !Ref AudigoVpc
+      CidrBlock: 10.0.16.0/20
+      AvailabilityZone: ap-northeast-2b
+      MapPublicIpOnLaunch: false
+      EnableDns64: false
+      Ipv6Native: false
+      Tags:
+        - Key: Name
+          Value: audigo-prd-pub-2b
+
+  AudigoInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Tags:
+        - Key: Name
+          Value: audigo-prd-igw
+        - Key: service
+          Value: audigo
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      VpcId: !Ref AudigoVpc
+      Tags:
+        - Key: Name
+          Value: audigo-prd-pub-rt
+        - Key: service
+          Value: audigo
+        - Key: ManagedBy
+          Value: CloudFormation
+
+
+  # ========================================
+  # Internet Gateway Attachment
+  # ========================================
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      VpcId: !Ref AudigoVpc
+      InternetGatewayId: !Ref AudigoInternetGateway
+
+  # ========================================
+  # Public Route - Internet
+  # ========================================
+  PublicDefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref AudigoInternetGateway
+
+  # ========================================
+  # Public Subnet Route Table Associations
+  # ========================================
+  PublicSubnet2aRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      SubnetId: !Ref PublicSubnet2a
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnet2bRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      SubnetId: !Ref PublicSubnet2b
+      RouteTableId: !Ref PublicRouteTable
+
+
+  # ========================================
+  # Main Route Table
+  # ========================================
+  MainRouteTable:
+    Type: AWS::EC2::RouteTable
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      VpcId: !Ref AudigoVpc
+      Tags:
+        - Key: Name
+          Value: audigo-prd-main-rt
+
+  # ========================================
+  # S3 Gateway VPC Endpoint
+  # ========================================
+  S3GatewayEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      VpcId: !Ref AudigoVpc
+      ServiceName: com.amazonaws.ap-northeast-2.s3
+      VpcEndpointType: Gateway
+      RouteTableIds: []
+      PolicyDocument:
+        Version: '2008-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: '*'
+            Action: '*'
+            Resource: '*'
+      Tags:
+        - Key: Name
+          Value: audigo-prd-vpce
+        - Key: service
+          Value: audigo
+
+
+Outputs:
+  VpcId:
+    Value: !Ref AudigoVpc
+  PublicSubnet2aId:
+    Value: !Ref PublicSubnet2a
+  PublicSubnet2bId:
+    Value: !Ref PublicSubnet2b
+  InternetGatewayId:
+    Value: !Ref AudigoInternetGateway
+  PublicRouteTableId:
+    Value: !Ref PublicRouteTable

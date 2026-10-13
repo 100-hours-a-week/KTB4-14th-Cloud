@@ -1,0 +1,36 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ec2:DescribeVpcs",
+        "ec2:DescribeVpcAttribute",
+        "ec2:DescribeSubnets",
+        "ec2:DescribeInternetGateways",
+        "ec2:DescribeRouteTables",
+        "ec2:DescribeTags"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "ap-northeast-2"
+        }
+      }
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ec2:CreateTags",
+        "ec2:DeleteTags"
+      ],
+      "Resource": [
+        "arn:aws:ec2:ap-northeast-2:185489190599:vpc/vpc-04129874f9fd135c6",
+        "arn:aws:ec2:ap-northeast-2:185489190599:subnet/subnet-0b9604514010cbb54",
+        "arn:aws:ec2:ap-northeast-2:185489190599:subnet/subnet-06bb5908818e1bc74",
+        "arn:aws:ec2:ap-northeast-2:185489190599:internet-gateway/igw-074bbf404a0c6fd99",
+        "arn:aws:ec2:ap-northeast-2:185489190599:route-table/rtb-02a312dc4c4252d75"
+      ]
+    }
+  ]
+}
