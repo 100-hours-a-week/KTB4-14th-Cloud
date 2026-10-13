@@ -27,6 +27,12 @@ Resources:
     Type: AWS::EC2::Subnet
     DeletionPolicy: Retain
     UpdateReplacePolicy: Retain
+    # 기존 편입 서브넷의 AZ를 유지하므로 AZ 고정 경고만 제외합니다.
+    Metadata:
+      cfn-lint:
+        config:
+          ignore_checks:
+            - W3010
     Properties:
       VpcId: !Ref AudigoVpc
       CidrBlock: 10.0.0.0/20
@@ -44,6 +50,12 @@ Resources:
     Type: AWS::EC2::Subnet
     DeletionPolicy: Retain
     UpdateReplacePolicy: Retain
+    # 기존 편입 서브넷의 AZ를 유지하므로 AZ 고정 경고만 제외합니다.
+    Metadata:
+      cfn-lint:
+        config:
+          ignore_checks:
+            - W3010
     Properties:
       VpcId: !Ref AudigoVpc
       CidrBlock: 10.0.16.0/20
