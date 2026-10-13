@@ -12,3 +12,8 @@
 !.env.example
 *.pem
 *.key
+
+# Python validation tools
+__pycache__/
+*.py[cod]
+.venv/

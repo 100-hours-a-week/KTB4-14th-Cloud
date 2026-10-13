@@ -1,0 +1,43 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "cloudformation:DescribeStacks"
+      ],
+      "Resource": "arn:aws:cloudformation:ap-northeast-2:185489190599:stack/audigo-network/*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "cloudformation:DescribeChangeSet"
+      ],
+      "Resource": [
+        "arn:aws:cloudformation:ap-northeast-2:185489190599:stack/audigo-network/*"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": "cloudformation:CreateChangeSet",
+      "Resource": [
+        "arn:aws:cloudformation:ap-northeast-2:185489190599:stack/audigo-network/*"
+      ],
+      "Condition": {
+        "ArnEquals": {
+          "cloudformation:RoleArn": "arn:aws:iam::185489190599:role/audigo-cfn-network-execution"
+        }
+      }
+    },
+    {
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "arn:aws:iam::185489190599:role/audigo-cfn-network-execution",
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": "cloudformation.amazonaws.com"
+        }
+      }
+    }
+  ]
+}
