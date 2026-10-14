@@ -1,4 +1,5 @@
 name: CloudFormation CD
+run-name: "[INFRA CD] ${{ github.event_name == 'workflow_dispatch' && inputs.stack || '활성 스택 전체' }} · @${{ github.actor }}"
 
 on:
   push:
