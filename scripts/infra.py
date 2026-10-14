@@ -20,10 +20,16 @@ from typing import Any
 
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 ROLE_PLACEHOLDER = re.compile(r"^\$\{([A-Z][A-Z0-9_]*)\}$")
-REQUIRED_KEYS = {
-    "name", "template", "parameters", "role_arn", "enabled", "allow_create", "depends_on"
+ROLE_GROUPS = frozenset({"core", "platform", "app"})
+EXECUTION_ROLE_ENV = {
+    "core": "${INFRA_CORE_CFN_ROLE_ARN}",
+    "platform": "${INFRA_PLATFORM_CFN_ROLE_ARN}",
+    "app": "${INFRA_APP_CFN_ROLE_ARN}",
 }
-OPTIONAL_KEYS = {"capabilities"}
+REQUIRED_KEYS = {
+    "name", "template", "parameters", "enabled", "allow_create", "depends_on"
+}
+OPTIONAL_KEYS = {"capabilities", "role_group"}
 STABLE_STACK_STATUSES = {
     "CREATE_COMPLETE", "UPDATE_COMPLETE", "IMPORT_COMPLETE", "UPDATE_ROLLBACK_COMPLETE",
 }
@@ -56,10 +62,15 @@ def config_path_value(root: Path, value: str) -> Path:
 def validate_config(config_path: Path, run_lint: bool = False) -> tuple[dict[str, Any], list[dict[str, Any]], list[str]]:
     data = load_json(config_path)
     root = repository_root(config_path)
-    if not isinstance(data, dict) or set(data) - {"region", "stacks"}:
-        raise InfraError("설정 최상위에는 region, stacks만 사용할 수 있습니다.")
+    if not isinstance(data, dict) or set(data) - {"region", "execution_roles", "stacks"}:
+        raise InfraError("설정 최상위에는 region, execution_roles, stacks만 사용할 수 있습니다.")
     if not isinstance(data.get("region"), str) or not data["region"]:
         raise InfraError("region은 비어 있지 않은 문자열이어야 합니다.")
+    execution_roles = data.get("execution_roles")
+    if execution_roles != EXECUTION_ROLE_ENV:
+        raise InfraError(
+            "execution_roles는 core/platform/app의 승인된 INFRA_*_CFN_ROLE_ARN 환경 변수 매핑과 일치해야 합니다."
+        )
     stacks = data.get("stacks")
     if not isinstance(stacks, list) or not stacks:
         raise InfraError("stacks는 비어 있지 않은 배열이어야 합니다.")
@@ -70,9 +81,9 @@ def validate_config(config_path: Path, run_lint: bool = False) -> tuple[dict[str
     for stack in stacks:
         if not isinstance(stack, dict) or not REQUIRED_KEYS.issubset(stack) or set(stack) - (REQUIRED_KEYS | OPTIONAL_KEYS):
             raise InfraError(f"각 stack은 다음 필수 키와 선택 capabilities만 사용할 수 있습니다: {sorted(REQUIRED_KEYS)}")
-        name, template, parameters, role = (stack[k] for k in ("name", "template", "parameters", "role_arn"))
-        if not all(isinstance(v, str) and v for v in (name, template, parameters)) or not isinstance(role, str):
-            raise InfraError(f"{name or '<unknown>'}: name/template/parameters/role_arn은 문자열이어야 합니다.")
+        name, template, parameters = (stack[k] for k in ("name", "template", "parameters"))
+        if not all(isinstance(v, str) and v for v in (name, template, parameters)):
+            raise InfraError(f"{name or '<unknown>'}: name/template/parameters는 비어 있지 않은 문자열이어야 합니다.")
         if name in names:
             raise InfraError(f"중복 stack 이름: {name}")
         if template in templates:
@@ -81,8 +92,11 @@ def validate_config(config_path: Path, run_lint: bool = False) -> tuple[dict[str
         templates.add(template)
         if not isinstance(stack["enabled"], bool) or not isinstance(stack["allow_create"], bool):
             raise InfraError(f"{name}: enabled와 allow_create는 boolean이어야 합니다.")
-        if stack["enabled"] and not role:
-            raise InfraError(f"{name}: 활성화된 stack에는 role_arn이 필요합니다.")
+        group = stack.get("role_group")
+        if group is not None and (not isinstance(group, str) or group not in ROLE_GROUPS):
+            raise InfraError(f"{name}: 알 수 없는 role_group입니다: {group}")
+        if stack["enabled"] and group not in ROLE_GROUPS:
+            raise InfraError(f"{name}: 활성화된 stack에는 role_group이 필요합니다.")
         if "capabilities" in stack and (not isinstance(stack["capabilities"], list) or not all(isinstance(v, str) for v in stack["capabilities"])):
             raise InfraError(f"{name}: capabilities는 문자열 배열이어야 합니다.")
         if not isinstance(stack["depends_on"], list) or not all(isinstance(v, str) for v in stack["depends_on"]):
@@ -195,6 +209,25 @@ def resolve_role(value: str) -> str:
     return resolved
 
 
+def resolve_stack_role(data: dict[str, Any], stack: dict[str, Any]) -> str:
+    """Resolve an active stack's execution role from the approved group map.
+
+    Per-stack role ARNs are intentionally unsupported.  A config edit cannot
+    redirect one stack to an arbitrary role without also changing the central
+    execution_roles mapping and its separately reviewed IAM policy.
+    """
+    group = stack.get("role_group")
+    if not isinstance(group, str) or group not in ROLE_GROUPS:
+        raise InfraError(f"{stack.get('name', '<unknown>')}: 알 수 없는 role_group입니다: {group}")
+    execution_roles = data.get("execution_roles")
+    if not isinstance(execution_roles, dict):
+        raise InfraError("execution_roles 설정이 올바르지 않습니다.")
+    configured = execution_roles.get(group)
+    if configured != EXECUTION_ROLE_ENV[group]:
+        raise InfraError(f"{stack.get('name', '<unknown>')}: {group} 실행 역할이 설정되지 않았습니다.")
+    return resolve_role(configured)
+
+
 def parameters_argument(root: Path, stack: dict[str, Any]) -> str:
     path = config_path_value(root, stack["parameters"])
     values = load_json(path)
@@ -240,8 +273,7 @@ def change_marker(commit: str, change_type: str, role: str) -> str:
     return f"audigo-iac commit={commit} type={change_type} role={role}"
 
 
-def change_set_args(root: Path, region: str, stack: dict[str, Any], commit: str, exists: bool, marker: str) -> list[str]:
-    role = resolve_role(stack["role_arn"])
+def change_set_args(root: Path, region: str, stack: dict[str, Any], commit: str, exists: bool, marker: str, role: str) -> list[str]:
     args = [
         "cloudformation", "create-change-set", "--region", region,
         "--stack-name", stack["name"], "--change-set-name", change_set_name(stack["name"], commit),
@@ -316,9 +348,9 @@ def plan_one(config_path: Path, stack_name: str, commit: str) -> dict[str, Any]:
     if not exists and not stack["allow_create"]:
         raise InfraError(f"{stack_name}: 존재하지 않는 stack 생성은 허용되지 않습니다.")
     change_type = "UPDATE" if exists else "CREATE"
-    role = resolve_role(stack["role_arn"])
+    role = resolve_stack_role(data, stack)
     marker = change_marker(commit, change_type, role)
-    created = aws(change_set_args(root, data["region"], stack, commit, exists, marker))
+    created = aws(change_set_args(root, data["region"], stack, commit, exists, marker, role))
     arn = created.get("Id")
     if not arn:
         raise InfraError("CreateChangeSet 응답에 Id가 없습니다.")
@@ -332,7 +364,8 @@ def plan_one(config_path: Path, stack_name: str, commit: str) -> dict[str, Any]:
     if no_changes(description, change_type):
         return {
             "name": stack_name, "region": data["region"], "change_set_arn": arn,
-            "change_type": change_type, "status": "NO_CHANGES", "role_arn": role, "marker": marker,
+            "change_type": change_type, "status": "NO_CHANGES", "role_group": stack["role_group"],
+            "role_arn": role, "marker": marker,
             "changes": [],
         }
     if wait_error:
@@ -344,7 +377,8 @@ def plan_one(config_path: Path, stack_name: str, commit: str) -> dict[str, Any]:
         raise InfraError(f"{stack_name}: 삭제 또는 교체 변경은 실행할 수 없습니다: {', '.join(unsafe)}")
     return {
         "name": stack_name, "region": data["region"], "change_set_arn": arn,
-        "change_type": change_type, "status": "READY", "role_arn": role, "marker": marker,
+        "change_type": change_type, "status": "READY", "role_group": stack["role_group"],
+        "role_arn": role, "marker": marker,
         "changes": review_changes(description),
     }
 
@@ -368,8 +402,9 @@ def apply_one(config_path: Path, report_path: Path, stack_name: str, commit: str
     if not stack or len(records) != 1:
         raise InfraError("report와 활성 stack 구성이 일치하지 않습니다.")
     record = records[0]
-    role = resolve_role(stack["role_arn"])
-    if record.get("role_arn") != role or record.get("status") not in ("READY", "NO_CHANGES"):
+    role = resolve_stack_role(data, stack)
+    if (record.get("role_group") != stack["role_group"] or record.get("role_arn") != role
+            or record.get("status") not in ("READY", "NO_CHANGES")):
         raise InfraError("report의 역할 또는 상태가 현재 설정과 일치하지 않습니다.")
     if record.get("change_type") == "CREATE" and not stack["allow_create"]:
         raise InfraError("현재 설정은 CREATE Change Set 실행을 허용하지 않습니다.")
