@@ -8,12 +8,13 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class EcsCommonImportTests(unittest.TestCase):
-    def test_ecs_common_import_preserves_clusters_and_stays_disabled(self):
+    def test_ecs_common_preserves_clusters_and_uses_platform_cd(self):
         config = json.loads((ROOT / 'deploy/stacks.json').read_text())
         stack = next(s for s in config['stacks'] if s['name'] == 'audigo-ecs-common')
-        self.assertFalse(stack['enabled'])
+        self.assertTrue(stack['enabled'])
         self.assertFalse(stack['allow_create'])
-        self.assertEqual('', stack['role_arn'])
+        self.assertEqual('platform', stack['role_group'])
+        self.assertNotIn('role_arn', stack)
         self.assertEqual([], json.loads((ROOT / stack['parameters']).read_text()))
         template = (ROOT / stack['template']).read_text()
         self.assertEqual(2, template.count('Type: AWS::ECS::Cluster\n'))
