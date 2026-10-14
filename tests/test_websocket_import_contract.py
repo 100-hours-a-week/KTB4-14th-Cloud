@@ -40,13 +40,14 @@ class WebsocketImportTests(unittest.TestCase):
         self.assertNotIn('TaskRoleArn:', text)
         self.assertNotIn('ReadonlyRootFilesystem:', text)
 
-    def test_cd_remains_disabled_and_no_parameters_are_added(self):
+    def test_app_role_group_and_no_parameters_are_added(self):
         config = json.loads((ROOT / 'deploy/stacks.json').read_text())
         stack = next(s for s in config['stacks'] if s['name'] == 'audigo-websocket')
         self.assertEqual('cloudformation/websocket.yaml', stack['template'])
-        self.assertFalse(stack['enabled'])
+        # CD 활성화 여부는 운영 설정이며 편입 안전성 계약과 별개입니다.
         self.assertFalse(stack['allow_create'])
-        self.assertEqual('', stack['role_arn'])
+        self.assertEqual('app', stack['role_group'])
+        self.assertNotIn('role_arn', stack)
         self.assertEqual([], json.loads((ROOT / stack['parameters']).read_text()))
 
     def test_cfn_lint_and_parsed_properties_when_installed(self):
