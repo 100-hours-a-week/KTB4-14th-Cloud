@@ -30,6 +30,21 @@ class ContractTests(unittest.TestCase):
         self.assertNotIn('configure-aws-credentials', text)
         self.assertNotIn('pull_request_target', text)
 
+    def test_ci_limits_both_automatic_triggers_to_infrastructure_paths(self):
+        text = (ROOT / '.github/workflows/cloudformation-ci.yml').read_text()
+        pr = text.split('  pull_request:\n', 1)[1].split('  push:\n', 1)[0]
+        push = text.split('  push:\n', 1)[1].split('  workflow_dispatch:', 1)[0]
+        paths = (
+            'cloudformation/**', 'bootstrap/**', 'deploy/**',
+            'scripts/infra*.py', 'tests/test_infra*.py', 'tests/test_iam*.py',
+            '.github/workflows/cloudformation-ci.yml',
+            '.github/workflows/cloudformation-cd.yml',
+        )
+        for trigger in (pr, push):
+            self.assertIn('paths:', trigger)
+            actual = re.findall(r"^      - '([^']+)'$", trigger, re.MULTILINE)
+            self.assertEqual(list(paths), actual)
+
     def test_infra_workflows_have_distinct_run_titles(self):
         ci = (ROOT / '.github/workflows/cloudformation-ci.yml').read_text()
         cd = (ROOT / '.github/workflows/cloudformation-cd.yml').read_text()
@@ -38,7 +53,7 @@ class ContractTests(unittest.TestCase):
         self.assertIn('run-name: "[INFRA CD]', cd)
         self.assertIn('inputs.stack', cd)
         for text in (ci, cd):
-            self.assertIn('@${{ github.actor }}', text)
+            self.assertNotIn('github.actor', text.splitlines()[1])
 
     def test_cd_auto_plan_and_approval_gate(self):
         text = (ROOT / '.github/workflows/cloudformation-cd.yml').read_text()
