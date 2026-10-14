@@ -30,6 +30,16 @@ class ContractTests(unittest.TestCase):
         self.assertNotIn('configure-aws-credentials', text)
         self.assertNotIn('pull_request_target', text)
 
+    def test_infra_workflows_have_distinct_run_titles(self):
+        ci = (ROOT / '.github/workflows/cloudformation-ci.yml').read_text()
+        cd = (ROOT / '.github/workflows/cloudformation-cd.yml').read_text()
+        self.assertIn('run-name: "[INFRA CI]', ci)
+        self.assertIn('github.event.pull_request.title', ci)
+        self.assertIn('run-name: "[INFRA CD]', cd)
+        self.assertIn('inputs.stack', cd)
+        for text in (ci, cd):
+            self.assertIn('@${{ github.actor }}', text)
+
     def test_cd_auto_plan_and_approval_gate(self):
         text = (ROOT / '.github/workflows/cloudformation-cd.yml').read_text()
         self.assertIn('  push:\n    branches: [main]', text)
