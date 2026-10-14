@@ -11,7 +11,7 @@ class EcsCommonImportTests(unittest.TestCase):
     def test_ecs_common_preserves_clusters_and_uses_platform_cd(self):
         config = json.loads((ROOT / 'deploy/stacks.json').read_text())
         stack = next(s for s in config['stacks'] if s['name'] == 'audigo-ecs-common')
-        self.assertTrue(stack['enabled'])
+        # 배포 활성화는 운영 설정이며, 편입 리소스 보존 조건과 분리한다.
         self.assertFalse(stack['allow_create'])
         self.assertEqual('platform', stack['role_group'])
         self.assertNotIn('role_arn', stack)

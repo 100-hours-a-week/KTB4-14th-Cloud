@@ -12,6 +12,21 @@ SPEC.loader.exec_module(infra)
 
 
 class ContractTests(unittest.TestCase):
+    def test_existing_stack_groups_are_independent_of_activation(self):
+        _, stacks, _ = infra.validate_config(ROOT / 'deploy/stacks.json')
+        expected = {
+            'audigo-network': 'core', 'audigo-dns': 'core',
+            'audigo-ecs-common': 'platform', 'audigo-alb': 'platform',
+            'audigo-frontend': 'app', 'audigo-rest-api': 'app',
+            'audigo-websocket': 'app',
+        }
+        for stack in stacks:
+            if stack['name'] in expected:
+                with self.subTest(stack=stack['name']):
+                    self.assertEqual(expected[stack['name']], stack.get('role_group'))
+                    self.assertNotIn('role_arn', stack)
+                    self.assertFalse(stack['allow_create'])
+
     def test_all_templates_registered(self):
         _, stacks, _ = infra.validate_config(ROOT / 'deploy/stacks.json')
         actual = list((ROOT / 'cloudformation').rglob('*.yaml')) + list((ROOT / 'cloudformation').rglob('*.yml'))

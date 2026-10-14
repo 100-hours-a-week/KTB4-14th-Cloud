@@ -8,12 +8,13 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class ImportContractTests(unittest.TestCase):
-    def test_alb_import_is_disabled_and_has_no_outputs_or_static_targets(self):
+    def test_alb_cd_uses_platform_and_preserves_import_safety(self):
         config = json.loads((ROOT / 'deploy/stacks.json').read_text())
         alb = next(s for s in config['stacks'] if s['name'] == 'audigo-alb')
-        self.assertFalse(alb['enabled'])
+        # 배포 활성화는 운영 설정이며, 편입 리소스 보존 조건과 분리한다.
         self.assertFalse(alb['allow_create'])
-        self.assertEqual('', alb['role_arn'])
+        self.assertEqual('platform', alb['role_group'])
+        self.assertNotIn('role_arn', alb)
         template = (ROOT / alb['template']).read_text()
         self.assertNotRegex(template, r'(?m)^Outputs:')
         self.assertNotRegex(template, r'(?m)^\s+Targets:')
