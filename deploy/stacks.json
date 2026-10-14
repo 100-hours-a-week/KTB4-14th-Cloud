@@ -88,7 +88,7 @@
       "template": "cloudformation/rest-api.yaml",
       "parameters": "deploy/parameters/rest-api.json",
       "role_group": "app",
-      "enabled": false,
+      "enabled": true,
       "allow_create": false,
       "depends_on": [],
       "capabilities": []
