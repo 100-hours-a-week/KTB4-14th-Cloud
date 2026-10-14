@@ -4,8 +4,26 @@ run-name: "[INFRA CI] ${{ github.event.pull_request.title || github.event.head_c
 on:
   pull_request:
     branches: [main]
+    paths:
+      - 'cloudformation/**'
+      - 'bootstrap/**'
+      - 'deploy/**'
+      - 'scripts/infra*.py'
+      - 'tests/test_infra*.py'
+      - 'tests/test_iam*.py'
+      - '.github/workflows/cloudformation-ci.yml'
+      - '.github/workflows/cloudformation-cd.yml'
   push:
     branches: [main]
+    paths:
+      - 'cloudformation/**'
+      - 'bootstrap/**'
+      - 'deploy/**'
+      - 'scripts/infra*.py'
+      - 'tests/test_infra*.py'
+      - 'tests/test_iam*.py'
+      - '.github/workflows/cloudformation-ci.yml'
+      - '.github/workflows/cloudformation-cd.yml'
   workflow_dispatch:
 
 permissions:
