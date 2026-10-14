@@ -1,0 +1,149 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Audigo 기존 ALB, HTTPS 리스너와 Fargate 대상 그룹의 편입용 템플릿입니다.
+  일반 생성이 아닌 IMPORT 방식으로 사용하며, Outputs는 편입 완료 후 추가합니다.
+
+# 작성 기준: 사용자가 제공한 2026-10-13 AWS CLI 조회 결과입니다.
+# 네트워크, 보안 그룹, ACM 인증서와 ECS 서비스는 이 스택에 편입하지 않습니다.
+Parameters:
+  ExistingVpcId:
+    Type: AWS::EC2::VPC::Id
+    Default: vpc-04129874f9fd135c6
+    Description: 기존 Audigo VPC ID입니다. 이 스택에서는 참조만 합니다.
+  ExistingPublicSubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Default: subnet-06bb5908818e1bc74,subnet-0b9604514010cbb54
+    Description: 기존 ALB가 사용하는 퍼블릭 서브넷 2개의 ID입니다.
+  ExistingAlbSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+    Default: sg-0b11224bd0d8f6750
+    Description: 현재 ALB에 연결된 보안 그룹 ID입니다. 보안 그룹 규칙은 변경하지 않습니다.
+
+Resources:
+  AudigoBackendAlb:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Name: audigo-backend-alb
+      Type: application
+      Scheme: internet-facing
+      IpAddressType: ipv4
+      Subnets: !Ref ExistingPublicSubnetIds
+      SecurityGroups:
+        - !Ref ExistingAlbSecurityGroupId
+      # 기존 태그는 없습니다. 비활성 로그의 빈 bucket/prefix는 선언하지 않습니다.
+      # ALB의 cross-zone은 항상 true이며 변경할 수 없으므로 선언하지 않습니다.
+      LoadBalancerAttributes:
+        - Key: access_logs.s3.enabled
+          Value: 'false'
+        - Key: health_check_logs.s3.enabled
+          Value: 'false'
+        - Key: connection_logs.s3.enabled
+          Value: 'false'
+        - Key: idle_timeout.timeout_seconds
+          Value: '60'
+        - Key: deletion_protection.enabled
+          Value: 'false'
+        - Key: routing.http2.enabled
+          Value: 'true'
+        - Key: routing.http.drop_invalid_header_fields.enabled
+          Value: 'false'
+        - Key: routing.http.xff_client_port.enabled
+          Value: 'false'
+        - Key: routing.http.preserve_host_header.enabled
+          Value: 'false'
+        - Key: routing.http.xff_header_processing.mode
+          Value: append
+        - Key: routing.http.desync_mitigation_mode
+          Value: defensive
+        - Key: client_keep_alive.seconds
+          Value: '3600'
+        - Key: waf.fail_open.enabled
+          Value: 'false'
+        - Key: routing.http.x_amzn_tls_version_and_cipher_suite.enabled
+          Value: 'false'
+        - Key: zonal_shift.config.enabled
+          Value: 'false'
+
+  AudigoFargateTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Name: audigo-v1-Fargate
+      VpcId: !Ref ExistingVpcId
+      Protocol: HTTP
+      ProtocolVersion: HTTP1
+      Port: 8080
+      TargetType: ip
+      IpAddressType: ipv4
+      HealthCheckEnabled: true
+      HealthCheckProtocol: HTTP
+      HealthCheckPort: traffic-port
+      HealthCheckPath: /actuator/health
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 3
+      UnhealthyThresholdCount: 3
+      Matcher:
+        HttpCode: '200'
+      # Targets는 선언하지 않습니다. 실제 태스크 IP의 등록·해제는 ECS가 관리합니다.
+      # 비활성 app_cookie의 빈 cookie_name은 선언하지 않습니다.
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: '300'
+        - Key: stickiness.enabled
+          Value: 'false'
+        - Key: stickiness.type
+          Value: lb_cookie
+        - Key: stickiness.lb_cookie.duration_seconds
+          Value: '86400'
+        - Key: stickiness.app_cookie.duration_seconds
+          Value: '86400'
+        - Key: slow_start.duration_seconds
+          Value: '0'
+        - Key: load_balancing.algorithm.type
+          Value: round_robin
+        - Key: load_balancing.algorithm.anomaly_mitigation
+          Value: 'off'
+        - Key: load_balancing.cross_zone.enabled
+          Value: use_load_balancer_configuration
+        - Key: target_group_health.dns_failover.minimum_healthy_targets.count
+          Value: '1'
+        - Key: target_group_health.dns_failover.minimum_healthy_targets.percentage
+          Value: 'off'
+        - Key: target_group_health.unhealthy_state_routing.minimum_healthy_targets.count
+          Value: '1'
+        - Key: target_group_health.unhealthy_state_routing.minimum_healthy_targets.percentage
+          Value: 'off'
+
+  AudigoHttpsListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LoadBalancerArn: !Ref AudigoBackendAlb
+      Port: 443
+      Protocol: HTTPS
+      SslPolicy: ELBSecurityPolicy-TLS13-1-2-Res-PQ-2025-09
+      Certificates:
+        - CertificateArn: arn:aws:acm:ap-northeast-2:185489190599:certificate/09c54455-a23b-4a9b-b0f4-422e3746fc70
+      MutualAuthentication:
+        Mode: 'off'
+      # 비어 있는 헤더 설정은 선언하지 않습니다. 현재 server 헤더 활성 값만 명시합니다.
+      ListenerAttributes:
+        - Key: routing.http.response.server.enabled
+          Value: 'true'
+      # 기본 규칙은 리스너에 포함됩니다. 별도 ListenerRule은 만들지 않습니다.
+      DefaultActions:
+        - Type: forward
+          Order: 1
+          TargetGroupArn: !Ref AudigoFargateTargetGroup
+          ForwardConfig:
+            TargetGroups:
+              - TargetGroupArn: !Ref AudigoFargateTargetGroup
+                Weight: 1
+            TargetGroupStickinessConfig:
+              Enabled: false
+              DurationSeconds: 3600
