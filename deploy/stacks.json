@@ -58,7 +58,7 @@
       "template": "cloudformation/alb.yaml",
       "parameters": "deploy/parameters/alb.json",
       "role_group": "platform",
-      "enabled": false,
+      "enabled": true,
       "allow_create": false,
       "depends_on": [],
       "capabilities": []
