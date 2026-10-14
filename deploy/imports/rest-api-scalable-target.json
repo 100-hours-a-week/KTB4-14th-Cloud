@@ -1,0 +1,213 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Audigo REST API \uae30\uc874 \ub9ac\uc18c\uc2a4 \ud3b8\uc785\uc6a9 \ud15c\ud50c\ub9bf. \ub2e8\uacc4\ubcc4 Import\ub9cc \uc218\ud589\ud558\uba70 \uc2e0\uaddc \uc0dd\uc131\uacfc \uc6b4\uc601 \uc124\uc815 \ubcc0\uacbd\uc744 \ubd84\ub9ac\ud569\ub2c8\ub2e4.",
+  "Resources": {
+    "AudigoRestTaskDefinition": {
+      "Type": "AWS::ECS::TaskDefinition",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "Family": "audigo-backend-Fargate",
+        "ExecutionRoleArn": "arn:aws:iam::185489190599:role/audigo-ecs-task-execution-role",
+        "NetworkMode": "awsvpc",
+        "RequiresCompatibilities": [
+          "FARGATE"
+        ],
+        "Cpu": "1024",
+        "Memory": "2048",
+        "RuntimePlatform": {
+          "CpuArchitecture": "ARM64",
+          "OperatingSystemFamily": "LINUX"
+        },
+        "EnableFaultInjection": false,
+        "ContainerDefinitions": [
+          {
+            "Name": "spring-boot",
+            "Image": "185489190599.dkr.ecr.ap-northeast-2.amazonaws.com/audigo/backend@sha256:620387c453cedc0fdd05c4dd661c9a35bbd65a1e0644b70b7b3e91dfffedcf70",
+            "Cpu": 0,
+            "Memory": 2048,
+            "MemoryReservation": 1536,
+            "Essential": true,
+            "ReadonlyRootFilesystem": false,
+            "PortMappings": [
+              {
+                "ContainerPort": 8080,
+                "HostPort": 8080,
+                "Protocol": "tcp",
+                "Name": "spring-boot-8080-tcp",
+                "AppProtocol": "http"
+              }
+            ],
+            "Environment": [
+              {
+                "Name": "AUDIGO_CORS_ALLOWED_ORIGINS",
+                "Value": "https://audigo.kr/"
+              },
+              {
+                "Name": "KAKAO_CLIENT_SECRET",
+                "Value": ""
+              },
+              {
+                "Name": "DB_USERNAME",
+                "Value": "audigo_app"
+              },
+              {
+                "Name": "KAKAO_REDIRECT_URI",
+                "Value": "https://audigo.kr/auth/kakao"
+              },
+              {
+                "Name": "DB_PORT",
+                "Value": "3306"
+              },
+              {
+                "Name": "AUDIGO_REFRESH_TOKEN_TTL_SECONDS",
+                "Value": "1209600"
+              },
+              {
+                "Name": "JPA_DDL_AUTO",
+                "Value": "update"
+              },
+              {
+                "Name": "AUDIGO_ACCESS_TOKEN_TTL_SECONDS",
+                "Value": "3600"
+              },
+              {
+                "Name": "DB_HOST",
+                "Value": "10.0.7.252"
+              },
+              {
+                "Name": "AUDIGO_AI_BASE_URL",
+                "Value": "http://10.0.15.32:8001"
+              }
+            ],
+            "Secrets": [
+              {
+                "Name": "AUDIGO_API_TOKEN",
+                "ValueFrom": "arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/v1/backend-dTTCJ5:AUDIGO_API_TOKEN::"
+              },
+              {
+                "Name": "AUDIGO_JWT_SECRET",
+                "ValueFrom": "arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/v1/backend-dTTCJ5:AUDIGO_JWT_SECRET::"
+              },
+              {
+                "Name": "DB_PASSWORD",
+                "ValueFrom": "arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/v1/backend-dTTCJ5:MYSQL_PASSWORD::"
+              },
+              {
+                "Name": "KAKAO_MAP_REST_API_KEY",
+                "ValueFrom": "arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/v1/backend-dTTCJ5:KAKAO_MAP_REST_API_KEY::"
+              },
+              {
+                "Name": "KAKAO_REST_API_KEY",
+                "ValueFrom": "arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/v1/backend-dTTCJ5:KAKAO_REST_API_KEY::"
+              },
+              {
+                "Name": "SPRING_DATASOURCE_URL",
+                "ValueFrom": "arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/v1/backend-dTTCJ5:SPRING_DATASOURCE_URL::"
+              },
+              {
+                "Name": "TAGO_SERVICE_KEY",
+                "ValueFrom": "arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/v1/backend-dTTCJ5:TAGO_SERVICE_KEY::"
+              }
+            ],
+            "LogConfiguration": {
+              "LogDriver": "awslogs",
+              "Options": {
+                "awslogs-group": "/ecs/audigo-backend-Fargate",
+                "awslogs-create-group": "true",
+                "awslogs-region": "ap-northeast-2",
+                "awslogs-stream-prefix": "ecs"
+              }
+            },
+            "HealthCheck": {
+              "Command": [
+                "CMD-SHELL",
+                "curl -fsS http://127.0.0.1:8080/actuator/health >/dev/null"
+              ],
+              "Interval": 30,
+              "Timeout": 5,
+              "Retries": 5,
+              "StartPeriod": 120
+            }
+          }
+        ]
+      }
+    },
+    "AudigoRestService": {
+      "Type": "AWS::ECS::Service",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "Cluster": "audigo-ecs-cluster",
+        "ServiceName": "audigo-backend-Fargate-service",
+        "TaskDefinition": {
+          "Ref": "AudigoRestTaskDefinition"
+        },
+        "LaunchType": "FARGATE",
+        "SchedulingStrategy": "REPLICA",
+        "DesiredCount": 1,
+        "PlatformVersion": "1.4.0",
+        "AvailabilityZoneRebalancing": "ENABLED",
+        "NetworkConfiguration": {
+          "AwsvpcConfiguration": {
+            "AssignPublicIp": "ENABLED",
+            "SecurityGroups": [
+              "sg-0da962a4706dacd5f"
+            ],
+            "Subnets": [
+              "subnet-0b9604514010cbb54",
+              "subnet-06bb5908818e1bc74"
+            ]
+          }
+        },
+        "LoadBalancers": [
+          {
+            "TargetGroupArn": "arn:aws:elasticloadbalancing:ap-northeast-2:185489190599:targetgroup/audigo-v1-Fargate/53f2677044a1644f",
+            "ContainerName": "spring-boot",
+            "ContainerPort": 8080
+          }
+        ],
+        "DeploymentConfiguration": {
+          "DeploymentCircuitBreaker": {
+            "Enable": true,
+            "Rollback": true,
+            "ResetOnHealthyTask": true,
+            "ThresholdConfiguration": {
+              "Type": "COUNT",
+              "Value": 3
+            }
+          },
+          "MaximumPercent": 200,
+          "MinimumHealthyPercent": 100,
+          "Strategy": "ROLLING",
+          "BakeTimeInMinutes": 5
+        },
+        "DeploymentController": {
+          "Type": "ECS"
+        },
+        "HealthCheckGracePeriodSeconds": 0,
+        "EnableECSManagedTags": true,
+        "EnableExecuteCommand": false
+      }
+    },
+    "AudigoRestScalableTarget": {
+      "Type": "AWS::ApplicationAutoScaling::ScalableTarget",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "ServiceNamespace": "ecs",
+        "ResourceId": "service/audigo-ecs-cluster/audigo-backend-Fargate-service",
+        "ScalableDimension": "ecs:service:DesiredCount",
+        "MinCapacity": 1,
+        "MaxCapacity": 2,
+        "RoleARN": "arn:aws:iam::185489190599:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService",
+        "SuspendedState": {
+          "DynamicScalingInSuspended": false,
+          "DynamicScalingOutSuspended": false,
+          "ScheduledScalingSuspended": false
+        }
+      },
+      "DependsOn": "AudigoRestService"
+    }
+  }
+}
