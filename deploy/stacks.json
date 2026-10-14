@@ -68,7 +68,7 @@
       "template": "cloudformation/frontend.yaml",
       "parameters": "deploy/parameters/frontend.json",
       "role_group": "app",
-      "enabled": false,
+      "enabled": true,
       "allow_create": false,
       "depends_on": [],
       "capabilities": []
