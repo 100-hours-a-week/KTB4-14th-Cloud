@@ -21,7 +21,7 @@
       "template": "cloudformation/dns.yaml",
       "parameters": "deploy/parameters/dns.json",
       "role_group": "core",
-      "enabled": false,
+      "enabled": true,
       "allow_create": false,
       "depends_on": [],
       "capabilities": []
