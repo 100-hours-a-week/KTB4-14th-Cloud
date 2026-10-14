@@ -17,6 +17,16 @@
       "capabilities": []
     },
     {
+      "name": "audigo-dns",
+      "template": "cloudformation/dns.yaml",
+      "parameters": "deploy/parameters/dns.json",
+      "role_group": "core",
+      "enabled": true,
+      "allow_create": false,
+      "depends_on": [],
+      "capabilities": []
+    },
+    {
       "name": "audigo-db",
       "template": "cloudformation/db.yaml",
       "parameters": "deploy/parameters/db.json",
