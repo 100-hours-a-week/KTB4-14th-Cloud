@@ -78,7 +78,7 @@
       "template": "cloudformation/ecs-common.yaml",
       "parameters": "deploy/parameters/ecs-common.json",
       "role_group": "platform",
-      "enabled": false,
+      "enabled": true,
       "allow_create": false,
       "depends_on": [],
       "capabilities": []
