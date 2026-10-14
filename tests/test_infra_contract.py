@@ -30,6 +30,15 @@ class ContractTests(unittest.TestCase):
         self.assertNotIn('configure-aws-credentials', text)
         self.assertNotIn('pull_request_target', text)
 
+    def test_ci_push_title_does_not_include_merge_commit_body(self):
+        text = (ROOT / '.github/workflows/cloudformation-ci.yml').read_text()
+        title = next(line for line in text.splitlines() if line.startswith('run-name:'))
+        self.assertNotIn('head_commit.message', title)
+        self.assertIn("github.event_name == 'pull_request'", title)
+        self.assertIn('github.event.pull_request.title', title)
+        self.assertIn("github.event_name == 'push' && 'main 반영 검증'", title)
+        self.assertIn("'수동 검증'", title)
+
     def test_ci_limits_both_automatic_triggers_to_infrastructure_paths(self):
         text = (ROOT / '.github/workflows/cloudformation-ci.yml').read_text()
         pr = text.split('  pull_request:\n', 1)[1].split('  push:\n', 1)[0]

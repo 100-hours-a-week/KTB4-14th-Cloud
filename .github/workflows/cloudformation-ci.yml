@@ -1,5 +1,5 @@
 name: CloudFormation CI
-run-name: "[INFRA CI] ${{ github.event.pull_request.title || github.event.head_commit.message || '수동 검증' }}"
+run-name: "[INFRA CI] ${{ github.event_name == 'pull_request' && github.event.pull_request.title || (github.event_name == 'push' && 'main 반영 검증' || '수동 검증') }}"
 
 on:
   pull_request:

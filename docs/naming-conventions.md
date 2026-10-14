@@ -24,7 +24,7 @@
 | 실행 | 표시 예시 |
 |---|---|
 | 인프라 PR CI | `[INFRA CI] feat(infra/network): 프라이빗 서브넷 추가` |
-| 인프라 main CI | `[INFRA CI] ci(infra): CI/CD 실행 제목 정리` |
+| 인프라 main CI | `[INFRA CI] main 반영 검증` |
 | 인프라 수동 CI | `[INFRA CI] 수동 검증` |
 | 인프라 자동 CD | `[INFRA CD] 활성 스택 전체` |
 | 인프라 수동 CD | `[INFRA CD] audigo-dns` |
