@@ -20,7 +20,7 @@
       "name": "audigo-dns",
       "template": "cloudformation/dns.yaml",
       "parameters": "deploy/parameters/dns.json",
-      "role_arn": "",
+      "role_group": "core",
       "enabled": false,
       "allow_create": false,
       "depends_on": [],
