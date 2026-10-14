@@ -105,3 +105,9 @@ ECR 또는 모니터링 기술 스택이 확정될 때까지 관련 권한은 �
 - [S3 암호화 API 권한](https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketEncryption.html): API 이름과 IAM Action 이름이 다르므로 Get/PutEncryptionConfiguration을 사용한다.
 
 정적 테스트는 실제 CloudFormation 공급자 호출 전체를 증명하지 않는다. AWS 사전 정책 검증과 스택별 검증 전에는 운영 적용 완료로 간주하지 않는다. 신규 생성 및 롤백 복구에 필요한 API도 Change Set별로 별도 검토한다.
+
+## ALB CD에서 확인한 추가 조회 권한
+
+ALB 업데이트에서 `ec2:DescribeVpcs` AccessDenied가 확인되어 Platform 역할에 해당 조회 Action만 추가했다. 네트워크 관리 주체는 여전히 Core이며 Platform에 EC2 변경 권한을 부여하지 않는다. DescribeVpcs는 리소스 ARN 제한을 지원하지 않으므로 Resource `*`와 배포 리전 조건을 사용한다. [EC2 공식 권한 표](https://docs.aws.amazon.com/service-authorization/latest/reference/list_ec2.html)
+
+코드 병합만으로 IAM 역할은 업데이트되지 않는다. 관리자가 수정 템플릿으로 `audigo-infra-iam` UPDATE 변경 세트를 검토·실행한 뒤 새 ALB Plan을 생성한다. 이전 실패 Apply만 재실행하지 않는다.

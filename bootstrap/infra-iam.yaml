@@ -270,6 +270,14 @@ Resources:
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
+              # ALB 공급자가 VPC를 확인할 때 필요합니다. 조회만 허용하며 ARN 제한은 지원하지 않습니다.
+              - Sid: DescribeVpcForAlbValidation
+                Effect: Allow
+                Action: ec2:DescribeVpcs
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion: !Ref AWS::Region
               - Sid: ReadManagedEcsClusters
                 Effect: Allow
                 Action:

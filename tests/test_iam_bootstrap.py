@@ -8,6 +8,16 @@ TEMPLATE = ROOT / "bootstrap" / "infra-iam.yaml"
 
 
 class IamBootstrapTests(unittest.TestCase):
+    def test_platform_can_describe_vpcs_for_alb_without_ec2_mutation(self):
+        start = self.text.index('  AudigoCfnPlatformExecutionRole:')
+        end = self.text.index('  AudigoCfnAppExecutionRole:', start)
+        block = self.text[start:end]
+        self.assertIn('Action: ec2:DescribeVpcs', block)
+        statement = block.split('Sid: DescribeVpcForAlbValidation', 1)[1].split('              - Sid:', 1)[0]
+        self.assertIn("Resource: '*'", statement)
+        self.assertIn('aws:RequestedRegion: !Ref AWS::Region', statement)
+        self.assertEqual(['DescribeVpcs'], re.findall(r'ec2:(\w+)', block))
+
     @classmethod
     def setUpClass(cls):
         cls.text = TEMPLATE.read_text(encoding="utf-8")
