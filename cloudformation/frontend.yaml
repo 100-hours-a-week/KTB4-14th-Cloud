@@ -117,6 +117,12 @@ Resources:
     Type: AWS::S3::BucketPolicy
     DeletionPolicy: Retain
     UpdateReplacePolicy: Retain
+    # 기존 정책 버전을 유지하기 위해 이 리소스의 버전 권고 경고만 제외합니다.
+    Metadata:
+      cfn-lint:
+        config:
+          ignore_checks:
+            - W2511
     Properties:
       Bucket: !Ref AudigoFrontendBucket
       # 정책 버전·식별자·허용 범위를 기존 정책 그대로 유지합니다.

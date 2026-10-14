@@ -42,6 +42,8 @@ Bucket Key는 SSE-KMS에 효과가 있는 옵션이지만 실제 조회된 true�
 
 기존 정책의 `Version: 2008-10-17`, `Id: PolicyForCloudFrontPrivateContent`,
 `Sid: AllowCloudFrontServicePrincipal`을 유지합니다.
+기존 버전을 보존하기 위해 `AudigoFrontendBucketPolicy`의 Metadata에서만 cfn-lint의
+`W2511` 버전 갱신 권고를 제외합니다. 다른 정책이나 경고의 검증은 유지합니다.
 CloudFront 서비스에 `audigo-front/*`의 `s3:GetObject`만 허용하며
 SourceArn은 `arn:aws:cloudfront::185489190599:distribution/E2XADD6BSMHBKF`입니다.
 템플릿의 Ref/GetAtt/Sub는 Import 후 같은 실제 이름·ARN·배포 ID로 해석됩니다.

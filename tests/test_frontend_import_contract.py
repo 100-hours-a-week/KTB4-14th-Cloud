@@ -8,6 +8,17 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class ImportContractTests(unittest.TestCase):
+    def test_legacy_policy_version_warning_is_suppressed_only_for_bucket_policy(self):
+        template = (ROOT / 'cloudformation/frontend.yaml').read_text()
+        policy = template.split('  AudigoFrontendBucketPolicy:\n', 1)[1]
+        self.assertIn("Version: '2008-10-17'", policy)
+        self.assertIn('Metadata:\n      cfn-lint:\n        config:\n          ignore_checks:\n            - W2511', policy)
+        self.assertEqual(1, template.count('- W2511'))
+        body = json.loads((ROOT / 'deploy/imports/frontend.json').read_text())
+        self.assertEqual({'cfn-lint': {'config': {'ignore_checks': ['W2511']}}},
+                         body['Resources']['AudigoFrontendBucketPolicy']['Metadata'])
+        self.assertEqual('2008-10-17', body['Resources']['AudigoFrontendBucketPolicy']['Properties']['PolicyDocument']['Version'])
+
     def test_frontend_ascii_import_copy_preserves_unicode_and_intrinsics(self):
         raw = (ROOT / 'deploy/imports/frontend.json').read_bytes()
         self.assertTrue(raw.isascii())
