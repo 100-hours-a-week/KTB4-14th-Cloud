@@ -98,7 +98,7 @@
       "template": "cloudformation/websocket.yaml",
       "parameters": "deploy/parameters/websocket.json",
       "role_group": "app",
-      "enabled": false,
+      "enabled": true,
       "allow_create": false,
       "depends_on": [],
       "capabilities": []
