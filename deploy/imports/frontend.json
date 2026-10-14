@@ -1,0 +1,185 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Audigo \uae30\uc874 \ud504\ub860\ud2b8\uc5d4\ub4dc S3 \ubc84\ud0b7, \ubc84\ud0b7 \uc815\ucc45, OAC\uc640 CloudFront\uc758 \ud3b8\uc785\uc6a9 \ud15c\ud50c\ub9bf\uc785\ub2c8\ub2e4. \uc77c\ubc18 \uc0dd\uc131\uc774 \uc544\ub2cc IMPORT \ubc29\uc2dd\uc73c\ub85c \uc0ac\uc6a9\ud558\uba70, Outputs\ub294 \uc804\uccb4 \ud3b8\uc785 \uc644\ub8cc \ud6c4 \ucd94\uac00\ud569\ub2c8\ub2e4.\n",
+  "Resources": {
+    "AudigoFrontendBucket": {
+      "Type": "AWS::S3::Bucket",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "BucketName": "audigo-front",
+        "OwnershipControls": {
+          "Rules": [
+            {
+              "ObjectOwnership": "BucketOwnerEnforced"
+            }
+          ]
+        },
+        "PublicAccessBlockConfiguration": {
+          "BlockPublicAcls": true,
+          "IgnorePublicAcls": true,
+          "BlockPublicPolicy": true,
+          "RestrictPublicBuckets": true
+        },
+        "BucketEncryption": {
+          "ServerSideEncryptionConfiguration": [
+            {
+              "ServerSideEncryptionByDefault": {
+                "SSEAlgorithm": "AES256"
+              },
+              "BucketKeyEnabled": true,
+              "BlockedEncryptionTypes": {
+                "EncryptionType": [
+                  "SSE-C"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "AudigoFrontendOriginAccessControl": {
+      "Type": "AWS::CloudFront::OriginAccessControl",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "OriginAccessControlConfig": {
+          "Name": "oac-audigo-front.s3.ap-northeast-2.amazonaws.com-mu2ky568eka",
+          "Description": "Created by CloudFront",
+          "OriginAccessControlOriginType": "s3",
+          "SigningBehavior": "always",
+          "SigningProtocol": "sigv4"
+        }
+      }
+    },
+    "AudigoFrontendDistribution": {
+      "Type": "AWS::CloudFront::Distribution",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "audigo"
+          }
+        ],
+        "DistributionConfig": {
+          "Aliases": [
+            "audigo.kr"
+          ],
+          "Comment": "\uc5b4\ub514\uace0 \uc11c\ube44\uc2a4\uc758 \ud504\ub860\ud2b8 \ubc30\ud3ec\uc785\ub2c8\ub2e4.",
+          "DefaultRootObject": "index.html",
+          "Enabled": true,
+          "HttpVersion": "http2",
+          "IPV6Enabled": true,
+          "PriceClass": "PriceClass_All",
+          "Staging": false,
+          "Origins": [
+            {
+              "Id": "audigo-front.s3.ap-northeast-2.amazonaws.com-mu2edr8i4ii",
+              "DomainName": {
+                "Fn::GetAtt": [
+                  "AudigoFrontendBucket",
+                  "RegionalDomainName"
+                ]
+              },
+              "OriginPath": "",
+              "OriginAccessControlId": {
+                "Fn::GetAtt": [
+                  "AudigoFrontendOriginAccessControl",
+                  "Id"
+                ]
+              },
+              "ConnectionAttempts": 3,
+              "ConnectionTimeout": 10,
+              "S3OriginConfig": {
+                "OriginAccessIdentity": "",
+                "OriginReadTimeout": 30
+              },
+              "OriginShield": {
+                "Enabled": false
+              }
+            }
+          ],
+          "DefaultCacheBehavior": {
+            "TargetOriginId": "audigo-front.s3.ap-northeast-2.amazonaws.com-mu2edr8i4ii",
+            "ViewerProtocolPolicy": "redirect-to-https",
+            "AllowedMethods": [
+              "HEAD",
+              "GET"
+            ],
+            "CachedMethods": [
+              "HEAD",
+              "GET"
+            ],
+            "Compress": true,
+            "SmoothStreaming": false,
+            "CachePolicyId": "658327ea-f89d-4fab-a63d-7e88639e58f6",
+            "GrpcConfig": {
+              "Enabled": false
+            }
+          },
+          "CustomErrorResponses": [
+            {
+              "ErrorCode": 403,
+              "ResponsePagePath": "/index.html",
+              "ResponseCode": 200,
+              "ErrorCachingMinTTL": 10
+            },
+            {
+              "ErrorCode": 404,
+              "ResponsePagePath": "/index.html",
+              "ResponseCode": 200,
+              "ErrorCachingMinTTL": 10
+            }
+          ],
+          "Restrictions": {
+            "GeoRestriction": {
+              "RestrictionType": "none"
+            }
+          },
+          "ViewerCertificate": {
+            "AcmCertificateArn": "arn:aws:acm:us-east-1:185489190599:certificate/c0c0e818-1749-4f70-9756-f156edf0c9b7",
+            "SslSupportMethod": "sni-only",
+            "MinimumProtocolVersion": "TLSv1.2_2025"
+          },
+          "WebACLId": "arn:aws:wafv2:us-east-1:185489190599:global/webacl/CreatedByCloudFront-722e4b05/397f3726-c207-415e-bd96-7b0ecc24f184"
+        }
+      }
+    },
+    "AudigoFrontendBucketPolicy": {
+      "Type": "AWS::S3::BucketPolicy",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "Bucket": {
+          "Ref": "AudigoFrontendBucket"
+        },
+        "PolicyDocument": {
+          "Version": "2008-10-17",
+          "Id": "PolicyForCloudFrontPrivateContent",
+          "Statement": [
+            {
+              "Sid": "AllowCloudFrontServicePrincipal",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "cloudfront.amazonaws.com"
+              },
+              "Action": "s3:GetObject",
+              "Resource": {
+                "Fn::Sub": "${AudigoFrontendBucket.Arn}/*"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "AWS:SourceArn": {
+                    "Fn::Sub": "arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${AudigoFrontendDistribution}"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

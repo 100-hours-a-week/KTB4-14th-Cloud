@@ -1,0 +1,135 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Audigo 기존 프론트엔드 S3 버킷, 버킷 정책, OAC와 CloudFront의 편입용 템플릿입니다.
+  일반 생성이 아닌 IMPORT 방식으로 사용하며, Outputs는 전체 편입 완료 후 추가합니다.
+
+# 작성 기준: 사용자가 제공한 2026-10-13 AWS CLI 조회 결과입니다.
+# 기존 객체를 업로드·삭제하거나 버킷 버전 관리를 활성화하지 않습니다.
+# ACM 인증서, WAF, 관리형 캐시 정책과 DNS 레코드는 기존 값을 참조만 합니다.
+Resources:
+  AudigoFrontendBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: audigo-front
+      # 버전 관리 설정이 없으므로 VersioningConfiguration을 선언하지 않습니다.
+      # BucketOwnerEnforced 상태이므로 AccessControl(ACL)도 선언하지 않습니다.
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+            BucketKeyEnabled: true
+            # 조회된 기존 보안 설정을 유지합니다. SSE-C 차단을 제거하지 않습니다.
+            BlockedEncryptionTypes:
+              EncryptionType:
+                - SSE-C
+      # 기존 태그, CORS, 웹사이트, 수명 주기, 로깅, 알림과 복제 설정은 없습니다.
+
+  AudigoFrontendOriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      OriginAccessControlConfig:
+        Name: oac-audigo-front.s3.ap-northeast-2.amazonaws.com-mu2ky568eka
+        Description: Created by CloudFront
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  AudigoFrontendDistribution:
+    Type: AWS::CloudFront::Distribution
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Tags:
+        - Key: Name
+          Value: audigo
+      DistributionConfig:
+        Aliases:
+          - audigo.kr
+        Comment: 어디고 서비스의 프론트 배포입니다.
+        DefaultRootObject: index.html
+        Enabled: true
+        HttpVersion: http2
+        IPV6Enabled: true
+        PriceClass: PriceClass_All
+        Staging: false
+        Origins:
+          - Id: audigo-front.s3.ap-northeast-2.amazonaws.com-mu2edr8i4ii
+            DomainName: !GetAtt AudigoFrontendBucket.RegionalDomainName
+            OriginPath: ''
+            OriginAccessControlId: !GetAtt AudigoFrontendOriginAccessControl.Id
+            ConnectionAttempts: 3
+            ConnectionTimeout: 10
+            S3OriginConfig:
+              # OAC를 사용하므로 OAI 식별자는 빈 문자열로 유지합니다.
+              OriginAccessIdentity: ''
+              OriginReadTimeout: 30
+            OriginShield:
+              Enabled: false
+        DefaultCacheBehavior:
+          TargetOriginId: audigo-front.s3.ap-northeast-2.amazonaws.com-mu2edr8i4ii
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods:
+            - HEAD
+            - GET
+          CachedMethods:
+            - HEAD
+            - GET
+          Compress: true
+          SmoothStreaming: false
+          # 기존 AWS 관리형 캐시 정책을 참조합니다. 새 정책을 생성하지 않습니다.
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+          GrpcConfig:
+            Enabled: false
+        CustomErrorResponses:
+          - ErrorCode: 403
+            ResponsePagePath: /index.html
+            ResponseCode: 200
+            ErrorCachingMinTTL: 10
+          - ErrorCode: 404
+            ResponsePagePath: /index.html
+            ResponseCode: 200
+            ErrorCachingMinTTL: 10
+        Restrictions:
+          GeoRestriction:
+            RestrictionType: none
+        ViewerCertificate:
+          # 인증서 선택 항목은 하나만 지정합니다. 기본 인증서 항목을 false로 넣지도 않습니다.
+          AcmCertificateArn: arn:aws:acm:us-east-1:185489190599:certificate/c0c0e818-1749-4f70-9756-f156edf0c9b7
+          SslSupportMethod: sni-only
+          MinimumProtocolVersion: TLSv1.2_2025
+        # 기존 WAF 연결을 유지합니다. WebACL 자체는 이 스택의 관리 대상이 아닙니다.
+        WebACLId: arn:aws:wafv2:us-east-1:185489190599:global/webacl/CreatedByCloudFront-722e4b05/397f3726-c207-415e-bd96-7b0ecc24f184
+        # 비활성 Logging과 비어 있는 함수 연결/캐시 동작/지속 배포 정책은 선언하지 않습니다.
+
+  AudigoFrontendBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Bucket: !Ref AudigoFrontendBucket
+      # 정책 버전·식별자·허용 범위를 기존 정책 그대로 유지합니다.
+      PolicyDocument:
+        Version: '2008-10-17'
+        Id: PolicyForCloudFrontPrivateContent
+        Statement:
+          - Sid: AllowCloudFrontServicePrincipal
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub '${AudigoFrontendBucket.Arn}/*'
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub 'arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${AudigoFrontendDistribution}'
