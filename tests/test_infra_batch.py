@@ -32,8 +32,8 @@ class BatchTest(unittest.TestCase):
     def write_config(self, enabled=(True, True, True)):
         stacks = []
         for index, name in enumerate(("a", "b", "c")):
-            stacks.append({"name": name, "template": f"cloudformation/{name}.yaml", "parameters": f"parameters/{name}.json", "role_arn": "role", "enabled": enabled[index], "allow_create": False, "depends_on": [] if name == "a" else ["a"] if name == "b" else ["b"]})
-        self.config.write_text(json.dumps({"region": "r", "stacks": stacks}))
+            stacks.append({"name": name, "template": f"cloudformation/{name}.yaml", "parameters": f"parameters/{name}.json", "role_group": "core", "enabled": enabled[index], "allow_create": False, "depends_on": [] if name == "a" else ["a"] if name == "b" else ["b"]})
+        self.config.write_text(json.dumps({"region": "r", "execution_roles": {"core": "${INFRA_CORE_CFN_ROLE_ARN}", "platform": "${INFRA_PLATFORM_CFN_ROLE_ARN}", "app": "${INFRA_APP_CFN_ROLE_ARN}"}, "stacks": stacks}))
 
     def test_plan_nonempty_and_deferred_transitive(self):
         def fake_plan(_, name, __): return {"name": name, "status": "READY", "change_set_arn": name}
