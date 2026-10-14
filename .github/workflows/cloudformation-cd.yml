@@ -1,4 +1,5 @@
 name: CloudFormation CD
+run-name: "[INFRA CD] ${{ github.event_name == 'workflow_dispatch' && inputs.stack || '활성 스택 전체' }}"
 
 on:
   push:
@@ -13,7 +14,7 @@ on:
   workflow_dispatch:
     inputs:
       stack:
-        description: 'all은 활성 스택 전체 계획, 개별 스택은 재시도용'
+        description: 'all은 활성 스택 전체 계획입니다. 변경 파일 자동 감지는 하지 않으며, 개별 스택은 재시도/검증용입니다.'
         type: choice
         required: true
         default: all
@@ -53,7 +54,9 @@ jobs:
     env:
       TARGET_STACK: ${{ inputs.stack || 'all' }}
       DEPLOY_COMMIT: ${{ github.sha }}
-      NETWORK_CFN_ROLE_ARN: ${{ vars.NETWORK_CFN_ROLE_ARN }}
+      INFRA_CORE_CFN_ROLE_ARN: ${{ vars.INFRA_CORE_CFN_ROLE_ARN }}
+      INFRA_PLATFORM_CFN_ROLE_ARN: ${{ vars.INFRA_PLATFORM_CFN_ROLE_ARN }}
+      INFRA_APP_CFN_ROLE_ARN: ${{ vars.INFRA_APP_CFN_ROLE_ARN }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -77,7 +80,7 @@ jobs:
           fi
       - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
-          role-to-assume: ${{ vars.INFRA_PLAN_ROLE_ARN }}
+          role-to-assume: ${{ vars.INFRA_DEPLOY_ROLE_ARN }}
           aws-region: ap-northeast-2
           allowed-account-ids: '185489190599'
           role-session-name: iac-plan-${{ github.run_id }}
@@ -111,7 +114,9 @@ jobs:
     env:
       TARGET_STACK: ${{ inputs.stack || 'all' }}
       DEPLOY_COMMIT: ${{ github.sha }}
-      NETWORK_CFN_ROLE_ARN: ${{ vars.NETWORK_CFN_ROLE_ARN }}
+      INFRA_CORE_CFN_ROLE_ARN: ${{ vars.INFRA_CORE_CFN_ROLE_ARN }}
+      INFRA_PLATFORM_CFN_ROLE_ARN: ${{ vars.INFRA_PLATFORM_CFN_ROLE_ARN }}
+      INFRA_APP_CFN_ROLE_ARN: ${{ vars.INFRA_APP_CFN_ROLE_ARN }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -134,7 +139,7 @@ jobs:
           fi
       - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
-          role-to-assume: ${{ vars.INFRA_APPLY_ROLE_ARN }}
+          role-to-assume: ${{ vars.INFRA_DEPLOY_ROLE_ARN }}
           aws-region: ap-northeast-2
           allowed-account-ids: '185489190599'
           role-session-name: iac-apply-${{ github.run_id }}

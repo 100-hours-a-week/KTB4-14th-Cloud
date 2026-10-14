@@ -1,0 +1,503 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Audigo CloudFormation 배포용 GitHub OIDC 역할 1개와 Core, Platform, App 실행 역할 3개를 생성합니다.
+  이 템플릿은 일반 인프라 CD 대상이 아닌 별도 bootstrap 스택으로, 승인된 관리자만 배포합니다.
+
+# 주의:
+# - 이 스택은 cloudformation/ 디렉터리에 두지 않아 일반 infra_batch 배포 대상에 포함되지 않습니다.
+# - GitHub OIDC subject는 조직/저장소 이전 여부와 Environment 설정에 따라 달라질 수 있으므로
+#   실제 Actions OIDC 토큰에서 확인한 문자열을 파라미터로 전달합니다. 기본값을 두지 않습니다.
+# - 실행 역할은 이 bootstrap 역할 및 GitHub OIDC 공급자/신뢰 정책을 수정할 권한이 없습니다.
+
+Parameters:
+  TargetAccountId:
+    Type: String
+    Default: '185489190599'
+    AllowedPattern: '^[0-9]{12}$'
+    Description: Audigo 인프라가 있는 AWS 계정 ID입니다.
+
+  GitHubOidcProviderArn:
+    Type: String
+    AllowedPattern: '^arn:aws:iam::[0-9]{12}:oidc-provider/token\.actions\.githubusercontent\.com$'
+    Description: GitHub Actions OIDC 공급자 ARN입니다. 실제 계정의 공급자 ARN을 지정합니다.
+
+  PlanOidcSubject:
+    Type: String
+    AllowedPattern: '^repo:100-hours-a-week(@[0-9]+)?/KTB4-14th-Cloud(@[0-9]+)?:environment:iac-plan$'
+    ConstraintDescription: 100-hours-a-week/KTB4-14th-Cloud의 iac-plan Environment subject여야 합니다.
+    Description: iac-plan Environment 작업의 실제 OIDC sub 클레임입니다. immutable ID 형식도 허용합니다.
+
+  ProductionOidcSubject:
+    Type: String
+    AllowedPattern: '^repo:100-hours-a-week(@[0-9]+)?/KTB4-14th-Cloud(@[0-9]+)?:environment:iac-production$'
+    ConstraintDescription: 100-hours-a-week/KTB4-14th-Cloud의 iac-production Environment subject여야 합니다.
+    Description: iac-production Environment 작업의 실제 OIDC sub 클레임입니다. immutable ID 형식도 허용합니다.
+
+Rules:
+  OidcSubjectsMustDiffer:
+    Assertions:
+      - Assert: !Not [!Equals [!Ref PlanOidcSubject, !Ref ProductionOidcSubject]]
+        AssertDescription: iac-plan과 iac-production OIDC subject는 서로 달라야 합니다.
+
+Resources:
+  AudigoGitHubInfraDeployRole:
+    Type: AWS::IAM::Role
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      RoleName: AudigoGitHubInfraDeployRole
+      Description: GitHub Actions OIDC deployment role for Audigo CloudFormation change sets.
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: GitHubActionsOidcOnly
+            Effect: Allow
+            Principal:
+              Federated: !Ref GitHubOidcProviderArn
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+              ForAnyValue:StringEquals:
+                token.actions.githubusercontent.com:sub:
+                  - !Ref PlanOidcSubject
+                  - !Ref ProductionOidcSubject
+      Policies:
+        - PolicyName: AudigoCloudFormationChangeSetAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # plan과 production은 승인된 Audigo 스택의 상태와 Change Set만 조회합니다.
+              - Sid: ReadApprovedAudigoStacks
+                Effect: Allow
+                Action:
+                  - cloudformation:DescribeStacks
+                  - cloudformation:DescribeChangeSet
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-network/*'
+                  - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-dns/*'
+                  - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-ecs-common/*'
+                  - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-alb/*'
+                  - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-rest-api/*'
+                  - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-websocket/*'
+                  - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-frontend/*'
+                Condition:
+                  ForAnyValue:StringEquals:
+                    token.actions.githubusercontent.com:sub:
+                      - !Ref PlanOidcSubject
+                      - !Ref ProductionOidcSubject
+
+              # 계획 Environment는 스택 그룹에 대응하는 실행 역할만 지정할 수 있습니다.
+              # 이 분리는 stacks.json 매핑과 별개로 IAM에서도 교차 그룹 실행 역할 전달을 차단합니다.
+              - Sid: PlanCreatesCoreChangeSetWithCoreExecutionRole
+                Effect: Allow
+                Action: cloudformation:CreateChangeSet
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-network/*'
+                  - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-dns/*'
+                Condition:
+                  StringEquals:
+                    token.actions.githubusercontent.com:sub: !Ref PlanOidcSubject
+                  ArnEquals:
+                    cloudformation:RoleArn: !GetAtt AudigoCfnCoreExecutionRole.Arn
+              - Sid: PlanCreatesPlatformChangeSetWithPlatformExecutionRole
+                Effect: Allow
+                Action: cloudformation:CreateChangeSet
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-ecs-common/*'
+                  - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-alb/*'
+                Condition:
+                  StringEquals:
+                    token.actions.githubusercontent.com:sub: !Ref PlanOidcSubject
+                  ArnEquals:
+                    cloudformation:RoleArn: !GetAtt AudigoCfnPlatformExecutionRole.Arn
+              - Sid: PlanCreatesAppChangeSetWithAppExecutionRole
+                Effect: Allow
+                Action: cloudformation:CreateChangeSet
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-rest-api/*'
+                  - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-websocket/*'
+                  - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-frontend/*'
+                Condition:
+                  StringEquals:
+                    token.actions.githubusercontent.com:sub: !Ref PlanOidcSubject
+                  ArnEquals:
+                    cloudformation:RoleArn: !GetAtt AudigoCfnAppExecutionRole.Arn
+
+              # production Environment만 승인된 Change Set을 실행합니다.
+              # ExecuteChangeSet은 cloudformation:RoleArn 조건 키를 지원하지 않으므로,
+              # 실행 역할 검증은 CreateChangeSet 조건과 scripts/infra.py의 marker 검증을 함께 사용합니다.
+              - Sid: ProductionExecutesApprovedChangeSet
+                Effect: Allow
+                Action: cloudformation:ExecuteChangeSet
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-network/*'
+                  - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-dns/*'
+                  - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-ecs-common/*'
+                  - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-alb/*'
+                  - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-rest-api/*'
+                  - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-websocket/*'
+                  - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-frontend/*'
+                Condition:
+                  StringEquals:
+                    token.actions.githubusercontent.com:sub: !Ref ProductionOidcSubject
+
+              # CloudFormation에 세 실행 역할을 전달하는 권한만 허용합니다.
+              - Sid: PassOnlyApprovedExecutionRolesToCloudFormation
+                Effect: Allow
+                Action: iam:PassRole
+                Resource:
+                  - !GetAtt AudigoCfnCoreExecutionRole.Arn
+                  - !GetAtt AudigoCfnPlatformExecutionRole.Arn
+                  - !GetAtt AudigoCfnAppExecutionRole.Arn
+                Condition:
+                  StringEquals:
+                    iam:PassedToService: cloudformation.amazonaws.com
+                    token.actions.githubusercontent.com:sub: !Ref PlanOidcSubject
+
+  AudigoCfnCoreExecutionRole:
+    Type: AWS::IAM::Role
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      RoleName: AudigoCfnCoreExecutionRole
+      Description: CloudFormation execution role for Audigo network and DNS stacks.
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: CloudFormationServiceOnly
+            Effect: Allow
+            Principal:
+              Service: cloudformation.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: AudigoCoreNetworkAndDns
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # EC2 Describe 계열은 서비스 권한 모델상 리소스 ARN 제한을 지원하지 않습니다.
+              - Sid: ReadManagedNetworkState
+                Effect: Allow
+                Action:
+                  - ec2:DescribeInternetGateways
+                  - ec2:DescribeRouteTables
+                  - ec2:DescribeSubnets
+                  - ec2:DescribeTags
+                  - ec2:DescribeVpcAttribute
+                  - ec2:DescribeVpcEndpoints
+                  - ec2:DescribeVpcs
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion: !Ref AWS::Region
+
+              # 현재 CloudFormation에 편입한 네트워크 리소스의 속성과 태그만 수정합니다.
+              - Sid: UpdateManagedVpcAndSubnets
+                Effect: Allow
+                Action:
+                  - ec2:ModifySubnetAttribute
+                  - ec2:ModifyVpcAttribute
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${TargetAccountId}:vpc/vpc-04129874f9fd135c6'
+                  - !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${TargetAccountId}:subnet/subnet-0b9604514010cbb54'
+                  - !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${TargetAccountId}:subnet/subnet-06bb5908818e1bc74'
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion: !Ref AWS::Region
+              - Sid: UpdateManagedVpcEndpoint
+                Effect: Allow
+                Action: ec2:ModifyVpcEndpoint
+                Resource: !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${TargetAccountId}:vpc-endpoint/vpce-079308755213dc468'
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion: !Ref AWS::Region
+              - Sid: UpdateManagedRouteTables
+                Effect: Allow
+                Action:
+                  - ec2:CreateRoute
+                  - ec2:DeleteRoute
+                  - ec2:ReplaceRoute
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${TargetAccountId}:route-table/rtb-02a312dc4c4252d75'
+                  - !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${TargetAccountId}:route-table/rtb-0d4372a7dde8793e4'
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion: !Ref AWS::Region
+              - Sid: TagOnlyManagedNetworkResources
+                Effect: Allow
+                Action:
+                  - ec2:CreateTags
+                  - ec2:DeleteTags
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${TargetAccountId}:vpc/vpc-04129874f9fd135c6'
+                  - !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${TargetAccountId}:subnet/subnet-0b9604514010cbb54'
+                  - !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${TargetAccountId}:subnet/subnet-06bb5908818e1bc74'
+                  - !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${TargetAccountId}:internet-gateway/igw-074bbf404a0c6fd99'
+                  - !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${TargetAccountId}:route-table/rtb-02a312dc4c4252d75'
+                  - !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${TargetAccountId}:route-table/rtb-0d4372a7dde8793e4'
+                  - !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${TargetAccountId}:vpc-endpoint/vpce-079308755213dc468'
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion: !Ref AWS::Region
+
+              # DNS 레코드 변경 권한은 의도적으로 제외합니다. Hosted Zone의 메타데이터와 태그만 관리합니다.
+              - Sid: ReadAndUpdateManagedHostedZoneMetadata
+                Effect: Allow
+                Action:
+                  - route53:GetHostedZone
+                  - route53:ListTagsForResource
+                  - route53:UpdateHostedZoneComment
+                  - route53:ChangeTagsForResource
+                Resource: !Sub 'arn:${AWS::Partition}:route53:::hostedzone/Z01588362VOGQ6V2J27VE'
+
+  AudigoCfnPlatformExecutionRole:
+    Type: AWS::IAM::Role
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      RoleName: AudigoCfnPlatformExecutionRole
+      Description: CloudFormation execution role for Audigo ECS common and ALB stacks.
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: CloudFormationServiceOnly
+            Effect: Allow
+            Principal:
+              Service: cloudformation.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: AudigoPlatformEcsAndAlb
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: ReadManagedEcsClusters
+                Effect: Allow
+                Action:
+                  - ecs:DescribeClusters
+                  - ecs:ListTagsForResource
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:ecs:${AWS::Region}:${TargetAccountId}:cluster/audigo-ecs-cluster'
+                  - !Sub 'arn:${AWS::Partition}:ecs:${AWS::Region}:${TargetAccountId}:cluster/audigo-staging-ecs-cluster'
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion: !Ref AWS::Region
+              - Sid: UpdateManagedEcsClusters
+                Effect: Allow
+                Action:
+                  - ecs:PutClusterCapacityProviders
+                  - ecs:UpdateCluster
+                  - ecs:TagResource
+                  - ecs:UntagResource
+                  - ecs:UpdateClusterSettings
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:ecs:${AWS::Region}:${TargetAccountId}:cluster/audigo-ecs-cluster'
+                  - !Sub 'arn:${AWS::Partition}:ecs:${AWS::Region}:${TargetAccountId}:cluster/audigo-staging-ecs-cluster'
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion: !Ref AWS::Region
+
+              # ELBv2 describe API는 리소스 단위 권한 제한을 지원하지 않는 호출이 있어 리전에만 한정합니다.
+              - Sid: ReadAlbState
+                Effect: Allow
+                Action:
+                  - elasticloadbalancing:DescribeListenerAttributes
+                  - elasticloadbalancing:DescribeListeners
+                  - elasticloadbalancing:DescribeLoadBalancerAttributes
+                  - elasticloadbalancing:DescribeLoadBalancers
+                  - elasticloadbalancing:DescribeTags
+                  - elasticloadbalancing:DescribeTargetGroupAttributes
+                  - elasticloadbalancing:DescribeTargetGroups
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion: !Ref AWS::Region
+              - Sid: UpdateManagedAlb
+                Effect: Allow
+                Action:
+                  - elasticloadbalancing:AddTags
+                  - elasticloadbalancing:ModifyLoadBalancerAttributes
+                  - elasticloadbalancing:RemoveTags
+                  - elasticloadbalancing:SetSecurityGroups
+                  - elasticloadbalancing:SetSubnets
+                Resource: !Sub 'arn:${AWS::Partition}:elasticloadbalancing:${AWS::Region}:${TargetAccountId}:loadbalancer/app/audigo-backend-alb/38d9b782b5383394'
+              - Sid: UpdateManagedTargetGroup
+                Effect: Allow
+                Action:
+                  - elasticloadbalancing:AddTags
+                  - elasticloadbalancing:ModifyTargetGroup
+                  - elasticloadbalancing:ModifyTargetGroupAttributes
+                  - elasticloadbalancing:RemoveTags
+                Resource: !Sub 'arn:${AWS::Partition}:elasticloadbalancing:${AWS::Region}:${TargetAccountId}:targetgroup/audigo-v1-Fargate/53f2677044a1644f'
+              - Sid: UpdateManagedHttpsListener
+                Effect: Allow
+                Action:
+                  - elasticloadbalancing:AddListenerCertificates
+                  - elasticloadbalancing:AddTags
+                  - elasticloadbalancing:ModifyListener
+                  - elasticloadbalancing:ModifyListenerAttributes
+                  - elasticloadbalancing:RemoveListenerCertificates
+                  - elasticloadbalancing:RemoveTags
+                Resource: !Sub 'arn:${AWS::Partition}:elasticloadbalancing:${AWS::Region}:${TargetAccountId}:listener/app/audigo-backend-alb/38d9b782b5383394/ab81d9c379ba9263'
+
+  AudigoCfnAppExecutionRole:
+    Type: AWS::IAM::Role
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      RoleName: AudigoCfnAppExecutionRole
+      Description: CloudFormation execution role for Audigo REST API, WebSocket and frontend stacks.
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: CloudFormationServiceOnly
+            Effect: Allow
+            Principal:
+              Service: cloudformation.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: AudigoAppEcsAndFrontend
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: ReadManagedRestService
+                Effect: Allow
+                Action:
+                  - ecs:DescribeServices
+                  - ecs:ListTagsForResource
+                Resource: !Sub 'arn:${AWS::Partition}:ecs:${AWS::Region}:${TargetAccountId}:service/audigo-ecs-cluster/audigo-backend-Fargate-service'
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion: !Ref AWS::Region
+              # DescribeTaskDefinition은 ARN 제한을 지원하지 않아 리전으로 제한합니다.
+              - Sid: DescribeTaskDefinitionsInDeploymentRegion
+                Effect: Allow
+                Action: ecs:DescribeTaskDefinition
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion: !Ref AWS::Region
+              # 태그 조회는 관리하는 두 Task Definition family로 제한합니다.
+              - Sid: ReadManagedTaskDefinitions
+                Effect: Allow
+                Action:
+                  - ecs:ListTagsForResource
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:ecs:${AWS::Region}:${TargetAccountId}:task-definition/audigo-backend-Fargate:*'
+                  - !Sub 'arn:${AWS::Partition}:ecs:${AWS::Region}:${TargetAccountId}:task-definition/audigo-websocket-Fargate:*'
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion: !Ref AWS::Region
+              - Sid: ManageRestApiTaskDefinition
+                Effect: Allow
+                Action:
+                  - ecs:DeregisterTaskDefinition
+                  - ecs:RegisterTaskDefinition
+                  - ecs:TagResource
+                  - ecs:UntagResource
+                Resource: !Sub 'arn:${AWS::Partition}:ecs:${AWS::Region}:${TargetAccountId}:task-definition/audigo-backend-Fargate:*'
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion: !Ref AWS::Region
+              - Sid: ManageWebsocketTaskDefinition
+                Effect: Allow
+                Action:
+                  - ecs:DeregisterTaskDefinition
+                  - ecs:RegisterTaskDefinition
+                  - ecs:TagResource
+                  - ecs:UntagResource
+                Resource: !Sub 'arn:${AWS::Partition}:ecs:${AWS::Region}:${TargetAccountId}:task-definition/audigo-websocket-Fargate:*'
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion: !Ref AWS::Region
+              - Sid: UpdateManagedRestService
+                Effect: Allow
+                Action:
+                  - ecs:TagResource
+                  - ecs:UntagResource
+                  - ecs:UpdateService
+                Resource: !Sub 'arn:${AWS::Partition}:ecs:${AWS::Region}:${TargetAccountId}:service/audigo-ecs-cluster/audigo-backend-Fargate-service'
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion: !Ref AWS::Region
+              - Sid: ReadApplicationAutoScalingState
+                Effect: Allow
+                Action:
+                  - application-autoscaling:DescribeScalableTargets
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion: !Ref AWS::Region
+              - Sid: ManageExistingRestScalableTarget
+                Effect: Allow
+                Action:
+                  - application-autoscaling:DeregisterScalableTarget
+                  - application-autoscaling:RegisterScalableTarget
+                Resource: !Sub 'arn:${AWS::Partition}:application-autoscaling:${AWS::Region}:${TargetAccountId}:scalable-target/0ec5774ccc7ebb454f719911f52aa608ed5b'
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion: !Ref AWS::Region
+
+              # Task Definition/ScalableTarget가 참조하는 기존 런타임 역할만 각 서비스에 전달합니다.
+              # 이 역할은 IAM 역할 생성·수정 또는 배포 역할 4개 전달 권한을 갖지 않습니다.
+              - Sid: PassOnlyExistingEcsTaskExecutionRole
+                Effect: Allow
+                Action: iam:PassRole
+                Resource: !Sub 'arn:${AWS::Partition}:iam::${TargetAccountId}:role/audigo-ecs-task-execution-role'
+                Condition:
+                  StringEquals:
+                    iam:PassedToService: ecs-tasks.amazonaws.com
+              - Sid: PassOnlyExistingEcsAutoScalingServiceLinkedRole
+                Effect: Allow
+                Action: iam:PassRole
+                Resource: !Sub 'arn:${AWS::Partition}:iam::${TargetAccountId}:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService'
+                Condition:
+                  StringEquals:
+                    iam:PassedToService: application-autoscaling.amazonaws.com
+
+              - Sid: ReadAndUpdateManagedFrontendBucket
+                Effect: Allow
+                Action:
+                  - s3:GetEncryptionConfiguration
+                  - s3:GetBucketLocation
+                  - s3:GetBucketOwnershipControls
+                  - s3:GetBucketPolicy
+                  - s3:GetBucketPolicyStatus
+                  - s3:GetBucketPublicAccessBlock
+                  - s3:GetBucketTagging
+                  - s3:PutEncryptionConfiguration
+                  - s3:PutBucketOwnershipControls
+                  - s3:PutBucketPolicy
+                  - s3:PutBucketPublicAccessBlock
+                Resource: !Sub 'arn:${AWS::Partition}:s3:::audigo-front'
+              - Sid: ReadAndUpdateManagedDistribution
+                Effect: Allow
+                Action:
+                  - cloudfront:GetDistribution
+                  - cloudfront:GetDistributionConfig
+                  - cloudfront:ListTagsForResource
+                  - cloudfront:TagResource
+                  - cloudfront:UntagResource
+                  - cloudfront:UpdateDistribution
+                Resource: !Sub 'arn:${AWS::Partition}:cloudfront::${TargetAccountId}:distribution/E2XADD6BSMHBKF'
+              # Origin Access Control API는 CloudFront 권한 모델에서 리소스 ARN 제한을 지원하지 않는 호출이 있어
+              # OAC 생성/삭제를 주지 않고, 현재 OAC의 조회·수정 API만 Resource:*로 허용합니다.
+              - Sid: ReadAndUpdateExistingOriginAccessControl
+                Effect: Allow
+                Action:
+                  - cloudfront:GetOriginAccessControl
+                  - cloudfront:UpdateOriginAccessControl
+                Resource: '*'
+
+Outputs:
+  GitHubDeployRoleArn:
+    Description: GitHub Actions가 OIDC로 AssumeRole할 역할 ARN입니다.
+    Value: !GetAtt AudigoGitHubInfraDeployRole.Arn
+  CoreExecutionRoleArn:
+    Description: Core 스택용 CloudFormation 실행 역할 ARN입니다.
+    Value: !GetAtt AudigoCfnCoreExecutionRole.Arn
+  PlatformExecutionRoleArn:
+    Description: Platform 스택용 CloudFormation 실행 역할 ARN입니다.
+    Value: !GetAtt AudigoCfnPlatformExecutionRole.Arn
+  AppExecutionRoleArn:
+    Description: App 스택용 CloudFormation 실행 역할 ARN입니다.
+    Value: !GetAtt AudigoCfnAppExecutionRole.Arn
