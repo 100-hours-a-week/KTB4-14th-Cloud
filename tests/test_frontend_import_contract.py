@@ -46,12 +46,12 @@ class ImportContractTests(unittest.TestCase):
         self.assertEqual(1, len(re.findall(r'(?m)^\s+AcmCertificateArn:', template)))
         self.assertNotRegex(template, r'(?m)^\s+(CloudFrontDefaultCertificate|IamCertificateId):')
 
-    def test_frontend_import_preserves_security_and_stays_disabled(self):
+    def test_frontend_import_preserves_security_and_app_group(self):
         config = json.loads((ROOT / 'deploy/stacks.json').read_text())
         frontend = next(s for s in config['stacks'] if s['name'] == 'audigo-frontend')
-        self.assertFalse(frontend['enabled'])
         self.assertFalse(frontend['allow_create'])
-        self.assertEqual('', frontend['role_arn'])
+        self.assertEqual('app', frontend['role_group'])
+        self.assertNotIn('role_arn', frontend)
         template = (ROOT / frontend['template']).read_text()
         self.assertNotRegex(template, r'(?m)^Outputs:')
         self.assertNotRegex(template, r'(?m)^\s+(AccessControl|VersioningConfiguration):')
