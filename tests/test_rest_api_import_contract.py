@@ -96,7 +96,7 @@ class RestApiImportTests(unittest.TestCase):
                 self.assertNotIn('PropagateTags', props)
                 self.assertTrue(props['EnableECSManagedTags'])
 
-    def test_final_yaml_has_all_imported_resources_and_cd_is_disabled(self):
+    def test_final_yaml_preserves_imported_resources_and_app_role_group(self):
         text = (ROOT / 'cloudformation/rest-api.yaml').read_text()
         self.assertIn('Type: AWS::ECS::TaskDefinition', text)
         self.assertIn('Type: AWS::ECS::Service', text)
@@ -107,9 +107,10 @@ class RestApiImportTests(unittest.TestCase):
         self.assertNotIn('\nOutputs:', text)
         config = json.loads((ROOT / 'deploy/stacks.json').read_text())
         stack = next(s for s in config['stacks'] if s['name'] == 'audigo-rest-api')
-        self.assertFalse(stack['enabled'])
+        # CD 활성화 여부는 운영 설정이며 기존 리소스 보존 계약과 별개입니다.
         self.assertFalse(stack['allow_create'])
-        self.assertEqual('', stack['role_arn'])
+        self.assertEqual('app', stack['role_group'])
+        self.assertNotIn('role_arn', stack)
         self.assertEqual([], json.loads((ROOT / stack['parameters']).read_text()))
 
 
