@@ -140,6 +140,14 @@ class IamBootstrapTests(unittest.TestCase):
         self.assertNotIn("bootstrap/infra-iam.yaml", config)
         self.assertNotIn("audigo-infra-iam", config)
 
+    def test_pass_role_combines_both_conditions_without_duplicate_operator(self):
+        start = self.text.index("Sid: PassOnlyApprovedExecutionRolesToCloudFormation")
+        end = self.text.index("\n  AudigoCfnCoreExecutionRole:", start)
+        block = self.text[start:end]
+        self.assertEqual(1, block.count("StringEquals:"))
+        self.assertIn("iam:PassedToService: cloudformation.amazonaws.com", block)
+        self.assertIn("token.actions.githubusercontent.com:sub: !Ref PlanOidcSubject", block)
+
 
 if __name__ == "__main__":
     unittest.main()
