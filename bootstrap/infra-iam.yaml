@@ -46,7 +46,7 @@ Resources:
     UpdateReplacePolicy: Retain
     Properties:
       RoleName: AudigoGitHubInfraDeployRole
-      Description: GitHub Actions OIDC에서 Audigo CloudFormation Change Set을 생성·검토·실행하는 역할입니다.
+      Description: GitHub Actions OIDC deployment role for Audigo CloudFormation change sets.
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -161,7 +161,7 @@ Resources:
     UpdateReplacePolicy: Retain
     Properties:
       RoleName: AudigoCfnCoreExecutionRole
-      Description: Audigo Network와 DNS CloudFormation 스택의 제한된 실행 역할입니다.
+      Description: CloudFormation execution role for Audigo network and DNS stacks.
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -256,7 +256,7 @@ Resources:
     UpdateReplacePolicy: Retain
     Properties:
       RoleName: AudigoCfnPlatformExecutionRole
-      Description: Audigo ECS Common과 ALB CloudFormation 스택의 제한된 실행 역할입니다.
+      Description: CloudFormation execution role for Audigo ECS common and ALB stacks.
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -345,7 +345,7 @@ Resources:
     UpdateReplacePolicy: Retain
     Properties:
       RoleName: AudigoCfnAppExecutionRole
-      Description: Audigo REST API, WebSocket, Frontend CloudFormation 스택의 제한된 실행 역할입니다.
+      Description: CloudFormation execution role for Audigo REST API, WebSocket and frontend stacks.
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:

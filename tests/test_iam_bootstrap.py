@@ -135,6 +135,13 @@ class IamBootstrapTests(unittest.TestCase):
         self.assertNotIn("AudigoCfnPlatformExecutionRole.Arn", execution)
         self.assertNotIn("AudigoCfnAppExecutionRole.Arn", execution)
 
+    def test_iam_role_descriptions_follow_iam_character_constraints(self):
+        descriptions = re.findall(r"^      Description: (.*)$", self.text, re.MULTILINE)
+        self.assertEqual(4, len(descriptions))
+        for description in descriptions:
+            self.assertLessEqual(len(description), 1000)
+            self.assertRegex(description, r"^[\u0009\u000A\u000D\u0020-\u007E\u00A1-\u00FF]*$")
+
     def test_bootstrap_is_not_a_normal_deployment_template(self):
         config = (ROOT / "deploy" / "stacks.json").read_text(encoding="utf-8")
         self.assertNotIn("bootstrap/infra-iam.yaml", config)
