@@ -38,7 +38,7 @@ class ContractTests(unittest.TestCase):
         self.assertIn('run-name: "[INFRA CD]', cd)
         self.assertIn('inputs.stack', cd)
         for text in (ci, cd):
-            self.assertIn('@${{ github.actor }}', text)
+            self.assertNotIn('github.actor', text.splitlines()[1])
 
     def test_cd_auto_plan_and_approval_gate(self):
         text = (ROOT / '.github/workflows/cloudformation-cd.yml').read_text()
