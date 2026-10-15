@@ -17,6 +17,7 @@ class ContractTests(unittest.TestCase):
         expected = {
             'audigo-network': 'core', 'audigo-dns': 'core',
             'audigo-ecs-common': 'platform', 'audigo-alb': 'platform',
+            'audigo-db': 'platform',
             'audigo-frontend': 'app', 'audigo-rest-api': 'app',
             'audigo-websocket': 'app',
         }
@@ -25,7 +26,9 @@ class ContractTests(unittest.TestCase):
                 with self.subTest(stack=stack['name']):
                     self.assertEqual(expected[stack['name']], stack.get('role_group'))
                     self.assertNotIn('role_arn', stack)
-                    self.assertFalse(stack['allow_create'])
+                    # self.assertFalse(stack['allow_create'])
+                    if stack['name'] != 'audigo-db':
+                        self.assertFalse(stack['allow_create'])
 
     def test_all_templates_registered(self):
         _, stacks, _ = infra.validate_config(ROOT / 'deploy/stacks.json')

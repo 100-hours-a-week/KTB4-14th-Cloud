@@ -3,11 +3,11 @@
 ## 현재 구현 범위
 
 - **CI:** `cloudformation/`의 모든 작성된 YAML을 검증한다. 작성 대기 중인 빈 파일은 명시적으로 보고하며, 활성화된 빈 파일은 실패한다.
-- **CD:** 인프라 관련 코드가 main에 반영되면 활성 스택 전체의 **계획을 자동 생성 → 팀원 승인 → 적용**한다. 현재 `audigo-network`만 활성화되어 있다. `Run workflow`는 전체/개별 스택 재시도용으로 유지한다.
+- **CD:** 인프라 관련 코드가 main에 반영되면 활성 스택 전체의 **계획을 자동 생성 → 팀원 승인 → 적용**한다. 현재 network, dns, ecs-common, alb, frontend, rest-api, websocket이 활성화되어 있다. 신규 `audigo-db`는 ~~Platform 그룹으로 등록하되 비활성 상태다.~~ 최초 생성을 위해 임시 활성화 했다. `Run workflow`는 전체/개별 스택 재시도용으로 유지한다.
 - 다른 스택은 템플릿과 IAM 준비 후 `deploy/stacks.json`에서 활성화한다. 매번 활성 스택 전체를 실제 AWS 상태와 비교하므로 직전 커밋 diff에 의존하지 않는다. 무변경 스택은 적용하지 않는다.
 - 선행 스택에 변경이 있으면 후속 스택 계획은 `deferred`로 표시한다. 선행 적용 후 `Run workflow → all`로 다시 계획한다. 변경될 Outputs를 적용 전에 확정하지 않기 위한 안전장치다.
 - `docs/`의 스캔 원본은 배포 대상이 아니다. 기존 AI 릴리스 워크플로는 변경하지 않았다.
-- 로컬 파일만 추가했다. IAM 생성, GitHub 설정, 커밋/push, 실제 스택 반영은 수행하지 않았다.
+- 활성화 상태는 `deploy/stacks.json`, IAM 선언은 `bootstrap/infra-iam.yaml`을 기준으로 확인한다. 코드 검증은 실제 AWS 적용을 증명하지 않는다.
 
 ## 파일 구성
 
@@ -109,7 +109,8 @@ plan이 통과해도 승인 환경이 설정되지 않으면 apply는 자동 시
 ## 로컬 검증
 
 ```bash
-python3 -m venv /tmp/audigo-ci
+# cfn-lint 1.57.2는 Python 3.10 이상이 필요하다. macOS 기본 python3(3.9)는 사용할 수 없다.
+python3.12 -m venv /tmp/audigo-ci
 /tmp/audigo-ci/bin/pip install -r deploy/requirements-ci.txt
 PATH="/tmp/audigo-ci/bin:$PATH" python3 scripts/infra.py validate --config deploy/stacks.json --lint
 python3 -m unittest discover -s tests -v
@@ -127,4 +128,4 @@ git diff --check
 
 현재 push 이벤트는 변경 파일 하나만이 아니라 **활성 스택 전체**를 계획한다. PR을 하나씩 병합해도 다른 활성 스택에 변경이 있으면 함께 계획될 수 있다. 검증 단계에서는 다른 스택을 활성화하지 않거나, `Run workflow → main → 개별 스택`으로 대상을 명시한다. `INFRA_DEPLOY_ENABLED=false`는 실행을 보류하기 위한 전환 안전장치이며 AWS 측 역할 권한을 제거하는 기능은 아니다.
 
-DNS 템플릿은 아직 별도 PR에 있으므로 이 브랜치에는 `audigo-dns`를 등록하지 않았다. DNS PR을 병합할 때 core 그룹과 개별 workflow 선택지를 등록하고 CI를 재검증한다. 이 브랜치에서 다른 PR 템플릿을 복사하거나 스택을 자동 활성화하지 않는다.
+신규 RDS 생성은 [RDS 생성 가이드](rds-create.md)를 따른다. `audigo-db`는 별도 IAM 적용과 지원 버전·네트워크 조회 후에 활성화한다. `workflow_dispatch`에는 이미 `audigo-db` 선택지가 있다.
