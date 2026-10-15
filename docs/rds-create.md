@@ -9,8 +9,10 @@
 | 원본 MySQL 버전·문자셋·콜레이션·시간대 확인 | 사용자 제공 SQL 결과 반영 |
 | 대상 버전·클래스의 gp3·Multi-AZ·암호화 지원 | 지정 조회 명령에 대한 사용자 제공 결과 일부 확인 |
 | cfn-lint·배포 설정 검증·전체 테스트 | 통과, 테스트 72개 |
-| 서브넷 AZ·라우팅·SG 실제 규칙·IAM 적용 확인 | 미완료 |
-| CREATE Change Set·AWS 리소스 생성·접속 검증 | 미수행 |
+| bootstrap IAM 반영 | 완료, 관리자 수동 Change Set |
+| CREATE Change Set·AWS 리소스 생성 | 완료, `audigo-db` `CREATE_COMPLETE` |
+| 최초 생성 후 `allow_create=false` 복원 | 완료 |
+| DB SG 인바운드 규칙·관리자 접속·앱/DMS 계정 | 미완료 |
 
 ## 생성할 리소스
 
@@ -137,14 +139,14 @@ system_time_zone       UTC
   "parameters": "deploy/parameters/db.json",
   "role_group": "platform",
   "enabled": true,
-  "allow_create": true,
+  "allow_create": false,
   "depends_on": [],
   "capabilities": []
 }
 ```
 
-~~현재는 검토용 비활성 상태입니다. 사전 확인과 IAM 반영 이후 최초 생성 시에만 `enabled=true`, `allow_create=true`로 변경합니다.~~
-최초 생성 완료 후 `allow_create=false`로 되돌리고, 이후 스택 관리를 위해 `enabled=true`는 유지합니다.
+최초 생성은 `enabled=true`, `allow_create=true`로 진행했고, 생성 완료 후 `allow_create=false`로 되돌렸습니다.
+이후 템플릿 수정은 `enabled=true`로 계속 CD에 반영합니다. 스택이 삭제되거나 이름이 바뀌어도 CD가 DB를 새로 만들지 않습니다.
 
 ## IAM과 비밀번호 관리
 
