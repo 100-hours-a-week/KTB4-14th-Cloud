@@ -2,7 +2,7 @@
   {"ParameterKey": "ExistingVpcId", "ParameterValue": "vpc-04129874f9fd135c6"},
   {"ParameterKey": "ExistingPrivateSubnetAId", "ParameterValue": "subnet-0ea8a5914af73dc2b"},
   {"ParameterKey": "ExistingPrivateSubnetBId", "ParameterValue": "subnet-05b3ce96ae987cbb1"},
-  {"ParameterKey": "ExistingDbSecurityGroupId", "ParameterValue": "sg-079261f4850dacc68"},
+  {"ParameterKey": "ExistingDbSecurityGroupId", "ParameterValue": "sg-00ffcb2b14abfe5b1"},
   {"ParameterKey": "DBEngineVersion", "ParameterValue": "8.4.11"},
   {"ParameterKey": "DBInstanceClass", "ParameterValue": "db.t4g.small"},
   {"ParameterKey": "AllocatedStorage", "ParameterValue": "30"},
