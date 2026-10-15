@@ -60,7 +60,7 @@ class IamBootstrapTests(unittest.TestCase):
     def test_create_change_set_cannot_cross_stack_group_and_execution_role(self):
         groups = {
             "Core": ("audigo-network", "audigo-dns", "AudigoCfnCoreExecutionRole.Arn"),
-            "Platform": ("audigo-ecs-common", "audigo-alb", "AudigoCfnPlatformExecutionRole.Arn"),
+            "Platform": ("audigo-ecs-common", "audigo-alb", "audigo-db", "AudigoCfnPlatformExecutionRole.Arn"),
             "App": ("audigo-rest-api", "audigo-websocket", "audigo-frontend", "AudigoCfnAppExecutionRole.Arn"),
         }
         for group, expected in groups.items():
@@ -88,8 +88,6 @@ class IamBootstrapTests(unittest.TestCase):
             "opensearch:",
             "aps:",
             "grafana:",
-            "secretsmanager:",
-            "rds:",
             "elasticache:",
             "sqs:",
         ):

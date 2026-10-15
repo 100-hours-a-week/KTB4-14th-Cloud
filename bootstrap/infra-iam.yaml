@@ -78,6 +78,7 @@ Resources:
                   - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-dns/*'
                   - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-ecs-common/*'
                   - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-alb/*'
+                  - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-db/*'
                   - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-rest-api/*'
                   - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-websocket/*'
                   - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-frontend/*'
@@ -106,6 +107,7 @@ Resources:
                 Resource:
                   - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-ecs-common/*'
                   - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-alb/*'
+                  - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-db/*'
                 Condition:
                   StringEquals:
                     token.actions.githubusercontent.com:sub: !Ref PlanOidcSubject
@@ -135,6 +137,7 @@ Resources:
                   - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-dns/*'
                   - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-ecs-common/*'
                   - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-alb/*'
+                  - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-db/*'
                   - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-rest-api/*'
                   - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-websocket/*'
                   - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-frontend/*'
@@ -256,7 +259,7 @@ Resources:
     UpdateReplacePolicy: Retain
     Properties:
       RoleName: AudigoCfnPlatformExecutionRole
-      Description: CloudFormation execution role for Audigo ECS common and ALB stacks.
+      Description: CloudFormation execution role for Audigo ECS common, ALB and RDS stacks.
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -338,6 +341,107 @@ Resources:
                   - elasticloadbalancing:RemoveListenerCertificates
                   - elasticloadbalancing:RemoveTags
                 Resource: !Sub 'arn:${AWS::Partition}:elasticloadbalancing:${AWS::Region}:${TargetAccountId}:listener/app/audigo-backend-alb/38d9b782b5383394/ab81d9c379ba9263'
+
+        - PolicyName: AudigoPlatformRds
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # 물리 이름은 db.yaml에 고정되어 있습니다. Replica, 복원, RDS 클러스터 API는 허용하지 않습니다.
+              - Sid: ManageAudigoDbInstance
+                Effect: Allow
+                Action:
+                  - rds:CreateDBInstance
+                  - rds:ModifyDBInstance
+                  - rds:DeleteDBInstance
+                  - rds:DescribeDBInstances
+                  - rds:AddTagsToResource
+                  - rds:RemoveTagsFromResource
+                  - rds:ListTagsForResource
+                Resource: !Sub 'arn:${AWS::Partition}:rds:${AWS::Region}:${TargetAccountId}:db:audigo-prd-db'
+              # Create/ModifyDBInstance는 DB에 연결하는 그룹에 대해서도 권한을 검사합니다.
+              # 이 권한으로 옵션 그룹의 내용을 수정하지는 않습니다.
+              - Sid: UseAudigoDbAssociatedGroups
+                Effect: Allow
+                Action:
+                  - rds:CreateDBInstance
+                  - rds:ModifyDBInstance
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:rds:${AWS::Region}:${TargetAccountId}:pg:audigo-prd-db-parameters'
+                  - !Sub 'arn:${AWS::Partition}:rds:${AWS::Region}:${TargetAccountId}:subgrp:audigo-prd-db-subnets'
+                  - !Sub 'arn:${AWS::Partition}:rds:${AWS::Region}:${TargetAccountId}:og:default:mysql-8-4'
+              - Sid: ManageAudigoDbSubnetGroup
+                Effect: Allow
+                Action:
+                  - rds:CreateDBSubnetGroup
+                  - rds:ModifyDBSubnetGroup
+                  - rds:DeleteDBSubnetGroup
+                  - rds:DescribeDBSubnetGroups
+                  - rds:AddTagsToResource
+                  - rds:RemoveTagsFromResource
+                  - rds:ListTagsForResource
+                Resource: !Sub 'arn:${AWS::Partition}:rds:${AWS::Region}:${TargetAccountId}:subgrp:audigo-prd-db-subnets'
+              - Sid: ManageAudigoDbParameterGroup
+                Effect: Allow
+                Action:
+                  - rds:CreateDBParameterGroup
+                  - rds:ModifyDBParameterGroup
+                  - rds:ResetDBParameterGroup
+                  - rds:DeleteDBParameterGroup
+                  - rds:DescribeDBParameterGroups
+                  - rds:DescribeDBParameters
+                  - rds:AddTagsToResource
+                  - rds:RemoveTagsFromResource
+                  - rds:ListTagsForResource
+                Resource: !Sub 'arn:${AWS::Partition}:rds:${AWS::Region}:${TargetAccountId}:pg:audigo-prd-db-parameters'
+              - Sid: ReadRdsEngineDefaults
+                Effect: Allow
+                Action:
+                  - rds:DescribeDBEngineVersions
+                  - rds:DescribeEngineDefaultParameters
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion: !Ref AWS::Region
+              - Sid: ReadRdsExistingNetwork
+                Effect: Allow
+                Action:
+                  - ec2:DescribeAccountAttributes
+                  - ec2:DescribeAvailabilityZones
+                  - ec2:DescribeInternetGateways
+                  - ec2:DescribeSecurityGroups
+                  - ec2:DescribeSubnets
+                  - ec2:DescribeVpcAttribute
+                  - ec2:DescribeVpcs
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion: !Ref AWS::Region
+              # 시크릿 UUID는 RDS가 정합니다. GetSecretValue와 시크릿 수정 권한은 주지 않습니다.
+              - Sid: CreateRdsManagedMasterSecret
+                Effect: Allow
+                Action:
+                  - secretsmanager:CreateSecret
+                  - secretsmanager:TagResource
+                Resource: !Sub 'arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${TargetAccountId}:secret:rds!db-*'
+              # AWS 관리형 키만 허용합니다. 고객 관리형 키를 쓰려면 정책을 별도로 변경해야 합니다.
+              - Sid: DescribeRdsManagedEncryptionKeys
+                Effect: Allow
+                Action: kms:DescribeKey
+                Resource: !Sub 'arn:${AWS::Partition}:kms:${AWS::Region}:${TargetAccountId}:key/*'
+                Condition:
+                  ForAnyValue:StringEquals:
+                    kms:ResourceAliases: [alias/aws/rds, alias/aws/secretsmanager]
+              - Sid: GrantRdsManagedStorageEncryption
+                Effect: Allow
+                Action: kms:CreateGrant
+                Resource: !Sub 'arn:${AWS::Partition}:kms:${AWS::Region}:${TargetAccountId}:key/*'
+                Condition:
+                  Bool:
+                    kms:GrantIsForAWSResource: 'true'
+                  StringEquals:
+                    kms:ViaService: !Sub 'rds.${AWS::Region}.amazonaws.com'
+                  ForAnyValue:StringEquals:
+                    kms:ResourceAliases: [alias/aws/rds]
 
   AudigoCfnAppExecutionRole:
     Type: AWS::IAM::Role

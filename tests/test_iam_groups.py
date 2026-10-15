@@ -120,10 +120,11 @@ class IamGroupTests(unittest.TestCase):
         self.assertEqual("core", groups["audigo-network"])
         self.assertEqual("platform", groups["audigo-alb"])
         self.assertEqual("platform", groups["audigo-ecs-common"])
+        self.assertEqual("platform", groups["audigo-db"])
         self.assertEqual("app", groups["audigo-frontend"])
         self.assertEqual("app", groups["audigo-rest-api"])
         self.assertEqual("app", groups["audigo-websocket"])
-        for name in ("audigo-db", "audigo-cache", "audigo-sqs", "audigo-ai-api", "audigo-monitoring"):
+        for name in ("audigo-cache", "audigo-sqs", "audigo-ai-api", "audigo-monitoring"):
             self.assertIsNone(groups[name])
 
         workflow = (ROOT / ".github/workflows/cloudformation-cd.yml").read_text(encoding="utf-8")

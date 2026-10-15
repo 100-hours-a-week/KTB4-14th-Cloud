@@ -1,0 +1,161 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 새롭게 구축하는 RDS에 대한 정의이다. RDS MySQL, DB Subnet Group, DB Parameter Group을 포함한다. 기존 VPC, Private Subnet, 보안 그룹은 참조만 한다.
+
+Parameters:
+  ExistingVpcId:
+    Type: AWS::EC2::VPC::Id
+  ExistingPrivateSubnetAId:
+    Type: AWS::EC2::Subnet::Id
+  ExistingPrivateSubnetBId:
+    Type: AWS::EC2::Subnet::Id
+  ExistingDbSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+  DBEngineVersion:
+    Type: String
+    AllowedPattern: '^8\.4\.[0-9]+$'
+    Description: 배포 리전에서 생성 가능함을 확인한 MySQL 8.4 정확한 마이너 버전.
+  DBInstanceClass:
+    Type: String
+    Default: db.t4g.small
+    AllowedValues: [db.t4g.small]
+  AllocatedStorage:
+    Type: Number
+    Default: 30
+    MinValue: 20
+    MaxValue: 65536
+  MultiAZ:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+  BackupRetentionPeriod:
+    Type: Number
+    Default: 7
+    MinValue: 1
+    MaxValue: 35
+  MasterUsername:
+    Type: String
+    Default: audigo_admin
+    AllowedValues: [audigo_admin]
+    Description: 관리자 전용 계정. 애플리케이션과 DMS 계정은 이후 별도로 생성한다.
+  CharacterSetServer:
+    Type: String
+    AllowedPattern: '^[a-zA-Z0-9_]+$'
+    Description: 원본 MySQL 서버와 스키마에서 확인한 값을 사용한다.
+  CollationServer:
+    Type: String
+    AllowedPattern: '^[a-zA-Z0-9_]+$'
+    Description: 원본 문자셋 및 MySQL 8.4와의 호환성을 확인한다.
+  DBTimeZone:
+    Type: String
+    MinLength: 1
+    Description: 원본 애플리케이션 동작과 일치하는 RDS 지원 time_zone 값.
+  PreferredBackupWindow:
+    Type: String
+    Default: '18:00-18:30'
+    AllowedPattern: '^([01][0-9]|2[0-3]):[0-5][0-9]-([01][0-9]|2[0-3]):[0-5][0-9]$'
+    Description: UTC 기준. 기본값은 매일 03:00-03:30(Asia/Seoul).
+  PreferredMaintenanceWindow:
+    Type: String
+    Default: 'sun:19:00-sun:20:00'
+    AllowedPattern: '^(mon|tue|wed|thu|fri|sat|sun):([01][0-9]|2[0-3]):[0-5][0-9]-(mon|tue|wed|thu|fri|sat|sun):([01][0-9]|2[0-3]):[0-5][0-9]$'
+    Description: UTC 기준. 기본값은 월요일 04:00-05:00(Asia/Seoul)으로 백업 시간과 겹치지 않는다.
+
+Rules:
+  ExistingNetworkMustMatchVpc:
+    Assertions:
+      - Assert:
+          Fn::EachMemberEquals:
+            - Fn::ValueOfAll: ['AWS::EC2::Subnet::Id', VpcId]
+            - Ref: ExistingVpcId
+        AssertDescription: 두 Private Subnet은 모두 선택한 VPC에 속해야 한다.
+      - Assert:
+          Fn::EachMemberEquals:
+            - Fn::ValueOfAll: ['AWS::EC2::SecurityGroup::Id', VpcId]
+            - Ref: ExistingVpcId
+        AssertDescription: DB 보안 그룹은 선택한 VPC에 속해야 한다.
+      - Assert: !Not [!Equals [!Ref ExistingPrivateSubnetAId, !Ref ExistingPrivateSubnetBId]]
+        AssertDescription: 서로 다른 Private Subnet 2개가 필요하다. 배포 전 각 서브넷의 AZ를 확인한다.
+
+Resources:
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      DBSubnetGroupName: audigo-prd-db-subnets
+      DBSubnetGroupDescription: Existing private subnets for Audigo RDS MySQL
+      SubnetIds:
+        - !Ref ExistingPrivateSubnetAId
+        - !Ref ExistingPrivateSubnetBId
+      Tags:
+        - {Key: service, Value: audigo}
+        - {Key: ManagedBy, Value: CloudFormation}
+  DBParameterGroup:
+    Type: AWS::RDS::DBParameterGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      DBParameterGroupName: audigo-prd-db-parameters
+      Description: Audigo MySQL 8.4 source-compatible server defaults
+      Family: mysql8.4
+      Parameters:
+        character_set_server: !Ref CharacterSetServer
+        collation_server: !Ref CollationServer
+        time_zone: !Ref DBTimeZone
+      Tags:
+        - {Key: service, Value: audigo}
+        - {Key: ManagedBy, Value: CloudFormation}
+  DBInstance:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      DBInstanceIdentifier: audigo-prd-db
+      Engine: mysql
+      EngineVersion: !Ref DBEngineVersion
+      EngineLifecycleSupport: open-source-rds-extended-support-disabled
+      DBInstanceClass: !Ref DBInstanceClass
+      AllocatedStorage: !Ref AllocatedStorage
+      StorageType: gp3
+      StorageEncrypted: true
+      # KmsKeyId를 생략하면 리전의 AWS 관리형 aws/rds 키를 사용한다.
+      PubliclyAccessible: false
+      NetworkType: IPV4
+      Port: '3306'
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      DBParameterGroupName: !Ref DBParameterGroup
+      VPCSecurityGroups: [!Ref ExistingDbSecurityGroupId]
+      MultiAZ: !Ref MultiAZ
+      MasterUsername: !Ref MasterUsername
+      ManageMasterUserPassword: true
+      BackupRetentionPeriod: !Ref BackupRetentionPeriod
+      PreferredBackupWindow: !Ref PreferredBackupWindow
+      PreferredMaintenanceWindow: !Ref PreferredMaintenanceWindow
+      CopyTagsToSnapshot: true
+      DeletionProtection: true
+      DeleteAutomatedBackups: false
+      AllowMajorVersionUpgrade: false
+      AutoMinorVersionUpgrade: false
+      Tags:
+        - {Key: Name, Value: audigo-prd-db}
+        - {Key: service, Value: audigo}
+        - {Key: ManagedBy, Value: CloudFormation}
+
+Outputs:
+  DBEndpoint:
+    Value: !GetAtt DBInstance.Endpoint.Address
+  DBPort:
+    Value: !GetAtt DBInstance.Endpoint.Port
+  DBInstanceIdentifier:
+    Value: !Ref DBInstance
+  DBSubnetGroupName:
+    Value: !Ref DBSubnetGroup
+  DBParameterGroupName:
+    Value: !Ref DBParameterGroup
+  DBSecurityGroupId:
+    Value: !Ref ExistingDbSecurityGroupId
+  VpcId:
+    Value: !Ref ExistingVpcId
+  MasterUserSecretArn:
+    Description: Secret ARN만 출력한다. 값 조회에는 별도의 운영자 권한이 필요하다.
+    Value: !GetAtt DBInstance.MasterUserSecret.SecretArn

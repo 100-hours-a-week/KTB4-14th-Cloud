@@ -6,12 +6,12 @@
 
 | 역할 | 책임 | 현재 권한 기준 |
 | --- | --- | --- |
-| `AudigoGitHubInfraDeployRole` | GitHub Actions OIDC 인증, Change Set 생성·조회·실행, 실행 역할 전달 | 현재 편입한 7개 스택만 |
+| `AudigoGitHubInfraDeployRole` | GitHub Actions OIDC 인증, Change Set 생성·조회·실행, 실행 역할 전달 | 기존 7개 스택과 신규 audigo-db |
 | `AudigoCfnCoreExecutionRole` | 네트워크와 DNS | `network.yaml`, `dns.yaml` |
-| `AudigoCfnPlatformExecutionRole` | ECS 공통 클러스터와 ALB | `ecs-common.yaml`, `alb.yaml` |
+| `AudigoCfnPlatformExecutionRole` | ECS 공통 클러스터, ALB, 신규 RDS | `ecs-common.yaml`, `alb.yaml`, `db.yaml` |
 | `AudigoCfnAppExecutionRole` | REST API, WebSocket Task Definition, Frontend | `rest-api.yaml`, `websocket.yaml`, `frontend.yaml` |
 
-이 문서는 **현재 편입·검토한 리소스만** 다룬다. ECR, DB, Cache, SQS, AI API, ACM, Secrets Manager, 보안 그룹, WAF, DNS 레코드, 모니터링은 이 권한 세트에 포함하지 않는다.
+이 문서는 **현재 편입·검토한 리소스와 신규 DB**를 다룬다. ECR, Cache, SQS, AI API, ACM, 보안 그룹 변경, WAF, DNS 레코드, 모니터링은 이 권한 세트에 포함하지 않는다. RDS 관리형 Secret 생성·태그 및 AWS 관리형 암호화 키 사용만 Platform에 추가하며 Secret 값 조회는 허용하지 않는다.
 
 > `bootstrap/infra-iam.yaml`은 `cloudformation/` 하위가 아니다. 일반 인프라 CD의 대상에서 제외하고, 별도 관리자 검토·승인으로만 적용한다. GitHub 인프라 배포 역할이 자신의 권한이나 OIDC 신뢰 정책을 수정할 수 없어야 한다.
 
@@ -45,11 +45,12 @@ GitHub Actions (OIDC)
 | Core | `audigo-dns` | `audigo.kr` Hosted Zone 메타데이터·태그 | 모든 DNS RecordSet, 도메인 등록 기관 |
 | Platform | `audigo-ecs-common` | 운영·스테이징 ECS Cluster 2개 | ECS Service, ECS Task Definition, IAM 역할 |
 | Platform | `audigo-alb` | 기존 ALB, HTTPS Listener, Fargate Target Group | Security Group, ACM 인증서, ECS Target 등록 |
+| Platform | `audigo-db` | 신규 private RDS MySQL, DB Subnet Group, DB Parameter Group | 기존 VPC·Subnet·SG 변경, Read Replica, CMK 생성, 앱/CDC 계정 |
 | App | `audigo-rest-api` | 기존 REST Task Definition, Fargate Service, 기존 Scalable Target | 새 Scaling Policy, Task Role, ECR/Secret/Log 리소스 |
 | App | `audigo-websocket` | 기존 WebSocket Task Definition | WebSocket Service, Auto Scaling, ALB Listener Rule |
 | App | `audigo-frontend` | 기존 S3 Bucket/Policy, CloudFront OAC/Distribution | S3 객체, ACM 인증서, WAF, Cache Policy, Route 53 RecordSet |
 
-`deploy/stacks.json`의 `enabled`는 배포 시점 제어이고, IAM 정책의 허용은 보안 경계다. 따라서 현재 7개 스택에 필요한 정책을 bootstrap에 모두 정의해도, 스택은 **한 번에 활성화하지 않는다.** 역할 ARN 연결과 Change Set을 확인한 후 Network → DNS → Platform → App 순으로 별도 PR/CD 검증을 진행한다.
+`deploy/stacks.json`의 `enabled`는 배포 시점 제어이고, IAM 정책의 허용은 보안 경계다. 따라서 기존 7개와 신규 DB 스택에 필요한 정책을 bootstrap에 정의해도, 스택은 **한 번에 활성화하지 않는다.** 역할 ARN 연결과 Change Set을 확인한 후 스택별 PR/CD 검증을 진행한다.
 
 ## `Resource: "*"` 사용 근거
 
@@ -59,10 +60,11 @@ GitHub Actions (OIDC)
 | --- | --- | --- | --- |
 | Core | EC2 `Describe*` | EC2 일부 Describe API는 리소스 수준 권한을 지원하지 않음 | `aws:RequestedRegion` = 배포 리전 |
 | Platform | ELBv2 `Describe*` | 해당 조회 API는 리소스 ARN 제한을 지원하지 않음 | `aws:RequestedRegion` = 배포 리전 |
+| Platform | RDS engine/default parameter 조회, EC2 네트워크 조회 | 해당 조회 API는 리소스 ARN 제한을 제공하지 않음 | `aws:RequestedRegion` = 배포 리전 |
 | App | ECS `DescribeTaskDefinition`, Auto Scaling `DescribeScalableTargets` | 해당 API는 리소스 수준 권한을 지원하지 않음 | `aws:RequestedRegion` = 배포 리전 |
 | App | CloudFront OAC 조회·수정 | OAC API의 리소스 수준 권한 모델 제한 | OAC 생성·삭제 권한 없음 |
 
-ECS Cluster/Service/Task Definition/Scalable Target 조회도 관리하는 ARN으로 제한한다. 수정 권한은 기존 물리 ID의 ARN 또는 Task Definition family ARN으로 제한한다. 신규 생성·교체·삭제가 필요한 변경은 현재 기본 정책에 포함하지 않는다. 해당 작업 전 Change Set과 IAM Policy Simulator/Access Analyzer 결과를 검토하고, 필요한 action·ARN만 별도 PR로 증분 추가한다. CloudFormation 롤백에 삭제 API가 필요한 경우도 자동으로 권한을 넓히지 않고 동일 절차로 검토한다.
+ECS Cluster/Service/Task Definition/Scalable Target 조회도 관리하는 ARN으로 제한한다. 기존 리소스의 신규 생성·교체·삭제는 기본 정책에 포함하지 않는다. 신규 DB의 생성·수정·롤백 삭제 API는 `audigo-prd-db` 및 두 그룹의 정확한 ARN에 추가한다. DB 스택은 `Retain`과 삭제 보호를 함께 사용한다. 추가 작업 전 Change Set과 IAM Policy Simulator/Access Analyzer 결과를 검토하고 필요한 action·ARN만 별도 PR로 추가한다.
 
 ## 런타임 권한과 배포 권한의 분리
 
@@ -105,3 +107,16 @@ ECR 또는 모니터링 기술 스택이 확정될 때까지 관련 권한은 �
 - [S3 암호화 API 권한](https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketEncryption.html): API 이름과 IAM Action 이름이 다르므로 Get/PutEncryptionConfiguration을 사용한다.
 
 정적 테스트는 실제 CloudFormation 공급자 호출 전체를 증명하지 않는다. AWS 사전 정책 검증과 스택별 검증 전에는 운영 적용 완료로 간주하지 않는다. 신규 생성 및 롤백 복구에 필요한 API도 Change Set별로 별도 검토한다.
+
+## 신규 RDS 생성 권한
+
+`audigo-db`는 Platform 실행 역할만 사용한다. GitHub 역할에는 DB 스택 조회, plan subject의 Platform 역할 지정 Change Set 생성, production subject의 실행 범위를 추가한다.
+
+- RDS 쓰기는 `db:audigo-prd-db`, `subgrp:audigo-prd-db-subnets`, `pg:audigo-prd-db-parameters`로 제한한다. 기존 네트워크에는 Describe만 허용한다.
+- DB 생성·수정 시 그룹 연결을 인가하려고 위 두 그룹과 기본 option group `og:default:mysql-8-4`에도 CreateDBInstance/ModifyDBInstance를 허용한다. option group 내용 변경 API는 부여하지 않는다. [공식 연결 권한 예시](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/security_iam_id-based-policy-examples-create-and-modify-examples.html)를 따른다.
+- 관리형 Secret은 RDS가 이름을 정하므로 같은 계정/리전의 `secret:rds!db-*`에 CreateSecret/TagResource만 허용한다. 다른 RDS 관리형 Secret도 이 이름 패턴에 포함되는 한계가 있으며 GetSecretValue는 없다.
+- KMS DescribeKey는 `alias/aws/rds`, `alias/aws/secretsmanager`로 제한한다. CreateGrant는 `alias/aws/rds`, RDS 경유, AWS 리소스 grant로 제한한다. CMK를 도입하려면 템플릿·정확한 키 ARN·키 정책을 함께 변경한다.
+- `AWSServiceRoleForRDS`가 계정에 있어야 한다. 없으면 관리자가 먼저 준비한다. 실행 역할에 IAM 역할 생성·수정 권한은 추가하지 않는다.
+- AWS 관리형 키와 서비스 연결 역할의 실제 상태, SCP/권한 경계, 정책 시뮬레이션과 CREATE Change Set은 배포 전에 별도로 검증한다.
+
+[RDS 생성 가이드](rds-create.md)와 [RDS 공급자 소스](https://github.com/aws-cloudformation/aws-cloudformation-resource-providers-rds)의 handler 권한을 참고한다. 공급자 권한 목록은 복원·Replica·Aurora까지 포함하므로 이번 템플릿이 사용하는 기능의 API만 반영했다.
