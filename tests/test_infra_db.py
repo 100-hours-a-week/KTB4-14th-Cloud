@@ -57,14 +57,11 @@ class DbSafetyTests(unittest.TestCase):
         self.assertEqual({'Fn::GetAtt': ['DBInstance', 'MasterUserSecret.SecretArn']},
                          self.template['Outputs']['MasterUserSecretArn']['Value'])
 
-    # def test_confirmed_configuration_is_not_auto_deployed_before_network_and_iam_checks(self):
-    #     self.assertEqual('platform', self.stack['role_group'])
-    #     self.assertFalse(self.stack['enabled'])
-    #     self.assertFalse(self.stack['allow_create'])
-    def test_db_stack_is_enabled_for_initial_creation(self):
+    def test_created_db_stack_stays_managed_without_recreation(self):
+        # 최초 생성 이후에는 수정만 허용하고, 스택이 사라져도 DB를 다시 만들지 않는다.
         self.assertEqual('platform', self.stack['role_group'])
         self.assertTrue(self.stack['enabled'])
-        self.assertTrue(self.stack['allow_create'])
+        self.assertFalse(self.stack['allow_create'])
         self.assertEqual([], self.stack['depends_on'])
         self.assertEqual('30', self.parameters['AllocatedStorage'])
         self.assertEqual('true', self.parameters['MultiAZ'])
