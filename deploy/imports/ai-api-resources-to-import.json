@@ -1,0 +1,10 @@
+[
+  {
+    "ResourceType": "AWS::ECS::Service",
+    "LogicalResourceId": "AudigoAiService",
+    "ResourceIdentifier": {
+      "ServiceArn": "arn:aws:ecs:ap-northeast-2:185489190599:service/audigo-ecs-cluster/audigo-mock-ai-service",
+      "Cluster": "arn:aws:ecs:ap-northeast-2:185489190599:cluster/audigo-ecs-cluster"
+    }
+  }
+]

@@ -125,7 +125,8 @@ class IamGroupTests(unittest.TestCase):
         self.assertEqual("app", groups["audigo-frontend"])
         self.assertEqual("app", groups["audigo-rest-api"])
         self.assertEqual("app", groups["audigo-websocket"])
-        for name in ("audigo-cache", "audigo-ai-api", "audigo-monitoring"):
+        self.assertEqual("app", groups["audigo-ai-api"])
+        for name in ("audigo-cache", "audigo-monitoring"):
             self.assertIsNone(groups[name])
 
         workflow = (ROOT / ".github/workflows/cloudformation-cd.yml").read_text(encoding="utf-8")
