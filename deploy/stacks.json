@@ -51,7 +51,7 @@
       "parameters": "deploy/parameters/sqs.json",
       "role_group": "platform",
       "enabled": true,
-      "allow_create": true,
+      "allow_create": false,
       "depends_on": [],
       "capabilities": []
     },

@@ -14,9 +14,9 @@ Backend ◀─Receive/Delete── Audigo-AI-Result-Queue ◀──SendMessage�
 | `cloudformation/sqs.yaml` 작성 | 완료 |
 | `bootstrap/infra-iam.yaml`의 Platform 역할에 SQS·알람 권한 추가 | 완료 (관리자 적용 필요) |
 | cfn-lint, 배포 설정 검증, 테스트 | 통과 (78개) |
-| `infra-iam` bootstrap 스택 업데이트 | **미완료** |
-| CREATE Change Set·AWS 리소스 생성 | **미완료** |
-| 최초 생성 후 `allow_create=false` 복원 | **미완료** |
+| `infra-iam` bootstrap 스택 업데이트 | 완료, 관리자 수동 Change Set |
+| CREATE Change Set·AWS 리소스 생성 | 완료, `audigo-sqs` `CREATE_COMPLETE` |
+| 최초 생성 후 `allow_create=false` 복원 | 완료 |
 | Backend·AI Worker Task Role·환경 변수 | 별도 작업 |
 
 ## 파일 구성
@@ -70,7 +70,7 @@ DLQ와 RedrivePolicy는 두지 않습니다. 이유는 아래 [재처리 정책]
 2. **PR 병합 → 인프라 CD**
    `audigo-sqs`는 `enabled=true`, `allow_create=true`라서 CREATE Change Set이 계획됩니다. Change Set을 검토하고 `iac-production` 승인 후 실행합니다.
 3. **`allow_create=false` 복원**
-   `CREATE_COMPLETE`를 확인한 후 별도 PR로 되돌립니다. DB와 같은 절차입니다.
+   `CREATE_COMPLETE`를 확인한 후 별도 PR로 되돌렸습니다. DB와 같은 절차입니다. 이후 템플릿 수정은 `enabled=true`로 계속 CD에 반영하며, 스택이 삭제되어도 CD가 Queue를 새로 만들지 않습니다.
 
 > 1번이 끝나기 전에 2번을 병합하면 CreateChangeSet 권한이 없어 CD 계획이 실패합니다.
 

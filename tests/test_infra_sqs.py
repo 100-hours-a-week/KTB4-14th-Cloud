@@ -88,6 +88,8 @@ class SqsStackTests(unittest.TestCase):
     def test_stack_uses_platform_role_and_is_planned_by_deploy_role(self):
         self.assertEqual('platform', self.stack['role_group'])
         self.assertTrue(self.stack['enabled'])
+        # 최초 생성 이후에는 수정만 허용하고, 스택이 사라져도 Queue를 다시 만들지 않는다.
+        self.assertFalse(self.stack['allow_create'])
         deploy = self.iam['Resources']['AudigoGitHubInfraDeployRole']['Properties']['Policies'][0]
         sids = {s['Sid']: s for s in deploy['PolicyDocument']['Statement']}
         for sid in ('ReadApprovedAudigoStacks', 'PlanCreatesPlatformChangeSetWithPlatformExecutionRole',
