@@ -17,7 +17,7 @@ class ContractTests(unittest.TestCase):
         expected = {
             'audigo-network': 'core', 'audigo-dns': 'core',
             'audigo-ecs-common': 'platform', 'audigo-alb': 'platform',
-            'audigo-db': 'platform',
+            'audigo-db': 'platform', 'audigo-sqs': 'platform',
             'audigo-frontend': 'app', 'audigo-rest-api': 'app',
             'audigo-websocket': 'app',
         }

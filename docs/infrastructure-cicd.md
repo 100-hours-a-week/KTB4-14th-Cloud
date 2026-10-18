@@ -3,7 +3,7 @@
 ## 현재 구현 범위
 
 - **CI:** `cloudformation/`의 모든 작성된 YAML을 검증한다. 작성 대기 중인 빈 파일은 명시적으로 보고하며, 활성화된 빈 파일은 실패한다.
-- **CD:** 인프라 관련 코드가 main에 반영되면 활성 스택 전체의 **계획을 자동 생성 → 팀원 승인 → 적용**한다. 현재 network, dns, ecs-common, alb, frontend, rest-api, websocket이 활성화되어 있다. `audigo-db`는 Platform 그룹으로 최초 생성을 마쳤으며, 이후 수정만 반영하도록 `allow_create=false`로 되돌렸다. `Run workflow`는 전체/개별 스택 재시도용으로 유지한다.
+- **CD:** 인프라 관련 코드가 main에 반영되면 활성 스택 전체의 **계획을 자동 생성 → 팀원 승인 → 적용**한다. 현재 network, dns, ecs-common, alb, frontend, rest-api, websocket이 활성화되어 있다. `audigo-db`, `audigo-sqs`는 Platform 그룹으로 최초 생성을 마쳤으며, 이후 수정만 반영하도록 `allow_create=false`로 되돌렸다. `Run workflow`는 전체/개별 스택 재시도용으로 유지한다.
 - 다른 스택은 템플릿과 IAM 준비 후 `deploy/stacks.json`에서 활성화한다. 매번 활성 스택 전체를 실제 AWS 상태와 비교하므로 직전 커밋 diff에 의존하지 않는다. 무변경 스택은 적용하지 않는다.
 - 선행 스택에 변경이 있으면 후속 스택 계획은 `deferred`로 표시한다. 선행 적용 후 `Run workflow → all`로 다시 계획한다. 변경될 Outputs를 적용 전에 확정하지 않기 위한 안전장치다.
 - `docs/`의 스캔 원본은 배포 대상이 아니다. 기존 AI 릴리스 워크플로는 변경하지 않았다.
