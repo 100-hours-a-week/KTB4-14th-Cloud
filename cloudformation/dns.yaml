@@ -1,0 +1,21 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Audigo 기존 퍼블릭 DNS 호스팅 영역의 편입용 템플릿입니다.
+  일반 생성이 아닌 IMPORT 방식으로 사용하며, 기존 DNS 레코드는 관리하지 않습니다.
+
+# 기존 호스팅 영역 ID: Z01588362VOGQ6V2J27VE
+# 실제 ID는 Import 단계에서 연결합니다. Name만 선언해서 배포하면 기존 영역이 편입되지 않습니다.
+# 기존 레코드 8개와 도메인 등록 기관의 네임서버 설정은 변경하지 않습니다.
+Resources:
+  AudigoHostedZone:
+    Type: AWS::Route53::HostedZone
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Name: audigo.kr.
+      HostedZoneConfig:
+        Comment: ''
+      # 기존 태그가 없으므로 추가하지 않습니다.
+      # 퍼블릭 호스팅 영역이므로 VPCs를 선언하지 않습니다.
+
+
