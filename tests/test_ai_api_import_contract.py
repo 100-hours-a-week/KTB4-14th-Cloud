@@ -67,7 +67,8 @@ class AiApiImportTests(unittest.TestCase):
 
     def test_stack_is_app_group_and_never_created_by_cd(self):
         self.assertEqual('app', self.stack['role_group'])
-        self.assertTrue(self.stack['enabled'])
+        # 2026-10-19 IMPORT 보류: 콘솔 스택(CREATE_FAILED)이 서비스를 소유 중이라 비활성화 (docs/ai-api-import.md)
+        self.assertFalse(self.stack['enabled'])
         self.assertFalse(self.stack['allow_create'])  # 스택은 관리자 IMPORT로만 만든다
         self.assertEqual([], json.loads((ROOT / self.stack['parameters']).read_text()))
 

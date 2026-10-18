@@ -1,5 +1,12 @@
 # AI Worker Service 편입(IMPORT)
 
+> **2026-10-19 보류.** `audigo-ai-api` 스택은 `enabled: false`로 비활성화했습니다.
+> 서비스가 콘솔 스택 `ECS-Console-V2-Service-audigo-mock-ai-service-audigo-ecs-cluster-3c9a2110`에 속해 있고,
+> 이 스택이 `CREATE_FAILED`(롤백 비활성) 상태로 남아 있어 안전하게 관리를 해제할 방법이 없습니다.
+> - `rollback-stack`, `delete-stack`: Retain이 없어 운영 중인 서비스가 삭제될 수 있음
+> - `update-stack --disable-rollback`: 실패한 리소스 재생성을 시도해 서비스에 영향 가능
+> 템플릿·IAM 권한은 유지하며, 서비스 재생성 등 정리 방법을 점검 시간에 별도로 계획한 뒤 재개합니다.
+
 운영 중인 `audigo-mock-ai-service`를 새 스택 `audigo-ai-api`로 IMPORT합니다. 실제 서비스는 바뀌지 않습니다.
 
 ## 관리 경계
