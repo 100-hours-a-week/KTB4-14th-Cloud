@@ -1,1 +1,5 @@
-[]
+[
+  {"ParameterKey": "JobQueueVisibilityTimeout", "ParameterValue": "360"},
+  {"ParameterKey": "ResultQueueVisibilityTimeout", "ParameterValue": "60"},
+  {"ParameterKey": "AlarmTopicArn", "ParameterValue": ""}
+]

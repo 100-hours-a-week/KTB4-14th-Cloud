@@ -34,7 +34,7 @@ V2가 안정화되면 V1의 불필요한 리소스를 정리합니다.
 | [`network.yaml`](cloudformation/network.yaml) | 기존 VPC·퍼블릭 서브넷 참조, 프라이빗 서브넷, 라우팅, 보안 그룹 |
 | [`db.yaml`](cloudformation/db.yaml) | RDS, DB Subnet Group |
 | [`cache.yaml`](cloudformation/cache.yaml) | Valkey |
-| [`sqs.yaml`](cloudformation/sqs.yaml) | FIFO 큐 4개와 DLQ |
+| [`sqs.yaml`](cloudformation/sqs.yaml) | AI Job/Result Standard Queue 2개, CloudWatch 알람 ([가이드](docs/sqs-create.md)) |
 | [`alb.yaml`](cloudformation/alb.yaml) | ALB, 리스너, 대상 그룹, 경로 규칙 |
 | [`frontend.yaml`](cloudformation/frontend.yaml) | 프론트엔드 S3, CloudFront |
 | [`ecs-common.yaml`](cloudformation/ecs-common.yaml) | ECS 클러스터, 공통 실행 역할 |
