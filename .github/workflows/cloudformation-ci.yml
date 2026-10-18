@@ -45,6 +45,6 @@ jobs:
       - name: 배포 설정과 전체 템플릿 검증
         run: python scripts/infra.py validate --config deploy/stacks.json --lint
       - name: 별도 관리자용 IAM 템플릿 검증
-        run: cfn-lint bootstrap/infra-iam.yaml
+        run: cfn-lint bootstrap/infra-iam.yaml bootstrap/sqs-task-roles.yaml
       - name: 배포 안전장치 테스트
         run: python -m unittest discover -s tests -v

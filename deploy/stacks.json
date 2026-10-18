@@ -49,8 +49,9 @@
       "name": "audigo-sqs",
       "template": "cloudformation/sqs.yaml",
       "parameters": "deploy/parameters/sqs.json",
-      "enabled": false,
-      "allow_create": false,
+      "role_group": "platform",
+      "enabled": true,
+      "allow_create": true,
       "depends_on": [],
       "capabilities": []
     },

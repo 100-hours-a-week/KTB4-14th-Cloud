@@ -1,0 +1,222 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Audigo V2 여행 생성용 AI 작업/결과 SQS Standard Queue 2개와 CloudWatch 알람을 신규 생성합니다.
+  Backend -> Job Queue -> AI Worker -> Result Queue -> Backend 흐름이며, DLQ는 사용하지 않습니다.
+
+# 작성 기준: 2026-10-18 "Audigo V2 여행 생성 SQS 개발 환경 구성 요청"
+# - Queue 물리 이름은 bootstrap/infra-iam.yaml의 Platform 실행 역할 허용 ARN(Audigo-AI-*)과 맞춥니다.
+# - 런타임 Task Role 권한(SendMessage/ReceiveMessage 등)은 이 스택 범위가 아니며 Backend/AI Worker Task Role 작업에서 별도로 다룹니다.
+#
+# 확정 정책 (2026-10-18)
+# - Job Queue: 큐 단 재시도 없음. AI Worker가 내부적으로 재시도하고, 최종 실패 시에도 실패 결과를 Result Queue로 보낸 뒤 Job 메시지를 삭제합니다.
+# - Result Queue: DLQ 없음. 처리 실패는 Backend 타임아웃 장치로 처리하며, Backend는 처리 실패 메시지도 삭제합니다.
+# - 1MiB 초과 결과의 S3 전달: 아직 도입하지 않습니다.
+# - DLQ가 없으므로 삭제되지 않은 메시지는 Visibility Timeout마다 재노출되어 보존 기간(4일) 동안 반복 수신됩니다.
+
+Parameters:
+  JobQueueVisibilityTimeout:
+    Type: Number
+    Default: 360
+    MinValue: 30
+    MaxValue: 43200
+    Description: AI 생성 1회 최대 시간 x (Worker 내부 재시도 + 1) + 여유. 초과 가능하면 Worker가 ChangeMessageVisibility로 연장합니다.
+  ResultQueueVisibilityTimeout:
+    Type: Number
+    Default: 60
+    MinValue: 10
+    MaxValue: 43200
+  AlarmTopicArn:
+    Type: String
+    Default: ''
+    AllowedPattern: '^$|^arn:aws:sns:[a-z0-9-]+:[0-9]{12}:[A-Za-z0-9_-]+$'
+    Description: 알람 알림을 보낼 기존 SNS Topic ARN입니다. 비워 두면 알람 상태만 기록합니다.
+  JobVisibleThreshold:
+    Type: Number
+    Default: 50
+    MinValue: 1
+  JobOldestAgeThresholdSeconds:
+    Type: Number
+    Default: 600
+    MinValue: 60
+  JobNotVisibleThreshold:
+    Type: Number
+    Default: 20
+    MinValue: 1
+    Description: Worker 동시 처리 수 x 2 정도로 설정합니다.
+  ResultVisibleThreshold:
+    Type: Number
+    Default: 20
+    MinValue: 1
+  ResultOldestAgeThresholdSeconds:
+    Type: Number
+    Default: 120
+    MinValue: 60
+  ResultNotVisibleThreshold:
+    Type: Number
+    Default: 20
+    MinValue: 1
+
+Conditions:
+  HasAlarmTopic: !Not [!Equals [!Ref AlarmTopicArn, '']]
+
+Resources:
+  # ---------- Queue ----------
+  # Producer: Backend / Consumer: AI Worker
+  AiJobQueue:
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      QueueName: Audigo-AI-Job-Queue
+      ReceiveMessageWaitTimeSeconds: 20
+      VisibilityTimeout: !Ref JobQueueVisibilityTimeout
+      MessageRetentionPeriod: 345600
+      MaximumMessageSize: 1048576
+      SqsManagedSseEnabled: true
+      Tags:
+        - {Key: service, Value: audigo}
+        - {Key: ManagedBy, Value: CloudFormation}
+
+  # Producer: AI Worker / Consumer: Backend
+  AiResultQueue:
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      QueueName: Audigo-AI-Result-Queue
+      ReceiveMessageWaitTimeSeconds: 20
+      VisibilityTimeout: !Ref ResultQueueVisibilityTimeout
+      MessageRetentionPeriod: 345600
+      MaximumMessageSize: 1048576
+      SqsManagedSseEnabled: true
+      Tags:
+        - {Key: service, Value: audigo}
+        - {Key: ManagedBy, Value: CloudFormation}
+
+  # ---------- CloudWatch 알람 ----------
+  # 메시지가 없는 시간에는 지표가 비어 있을 수 있어 notBreaching으로 처리합니다.
+  AiJobVisibleAlarm:
+    Type: AWS::CloudWatch::Alarm
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      AlarmName: audigo-sqs-ai-job-visible
+      AlarmDescription: AI Job Queue 적체 - Worker 처리량이 요청량을 따라가지 못합니다.
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions: [{Name: QueueName, Value: !GetAtt AiJobQueue.QueueName}]
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 5
+      Threshold: !Ref JobVisibleThreshold
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [HasAlarmTopic, [!Ref AlarmTopicArn], !Ref AWS::NoValue]
+      OKActions: !If [HasAlarmTopic, [!Ref AlarmTopicArn], !Ref AWS::NoValue]
+
+  AiJobOldestAgeAlarm:
+    Type: AWS::CloudWatch::Alarm
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      AlarmName: audigo-sqs-ai-job-oldest-age
+      AlarmDescription: AI Job Queue의 가장 오래된 메시지가 오래 대기 중입니다. Worker 다운 또는 지연을 확인합니다.
+      Namespace: AWS/SQS
+      MetricName: ApproximateAgeOfOldestMessage
+      Dimensions: [{Name: QueueName, Value: !GetAtt AiJobQueue.QueueName}]
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 5
+      Threshold: !Ref JobOldestAgeThresholdSeconds
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [HasAlarmTopic, [!Ref AlarmTopicArn], !Ref AWS::NoValue]
+      OKActions: !If [HasAlarmTopic, [!Ref AlarmTopicArn], !Ref AWS::NoValue]
+
+  AiJobNotVisibleAlarm:
+    Type: AWS::CloudWatch::Alarm
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      AlarmName: audigo-sqs-ai-job-not-visible
+      AlarmDescription: AI Job Queue에서 처리 중인 메시지가 비정상적으로 많습니다. Worker 멈춤 또는 삭제 누락을 확인합니다.
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesNotVisible
+      Dimensions: [{Name: QueueName, Value: !GetAtt AiJobQueue.QueueName}]
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 5
+      Threshold: !Ref JobNotVisibleThreshold
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [HasAlarmTopic, [!Ref AlarmTopicArn], !Ref AWS::NoValue]
+      OKActions: !If [HasAlarmTopic, [!Ref AlarmTopicArn], !Ref AWS::NoValue]
+
+  AiResultVisibleAlarm:
+    Type: AWS::CloudWatch::Alarm
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      AlarmName: audigo-sqs-ai-result-visible
+      AlarmDescription: AI Result Queue 적체 - Backend 결과 소비가 지연되고 있습니다.
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions: [{Name: QueueName, Value: !GetAtt AiResultQueue.QueueName}]
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 5
+      Threshold: !Ref ResultVisibleThreshold
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [HasAlarmTopic, [!Ref AlarmTopicArn], !Ref AWS::NoValue]
+      OKActions: !If [HasAlarmTopic, [!Ref AlarmTopicArn], !Ref AWS::NoValue]
+
+  AiResultOldestAgeAlarm:
+    Type: AWS::CloudWatch::Alarm
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      AlarmName: audigo-sqs-ai-result-oldest-age
+      AlarmDescription: AI Result Queue의 가장 오래된 메시지가 오래 대기 중입니다. Backend Consumer 상태를 확인합니다.
+      Namespace: AWS/SQS
+      MetricName: ApproximateAgeOfOldestMessage
+      Dimensions: [{Name: QueueName, Value: !GetAtt AiResultQueue.QueueName}]
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 5
+      Threshold: !Ref ResultOldestAgeThresholdSeconds
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [HasAlarmTopic, [!Ref AlarmTopicArn], !Ref AWS::NoValue]
+      OKActions: !If [HasAlarmTopic, [!Ref AlarmTopicArn], !Ref AWS::NoValue]
+
+  AiResultNotVisibleAlarm:
+    Type: AWS::CloudWatch::Alarm
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      AlarmName: audigo-sqs-ai-result-not-visible
+      AlarmDescription: AI Result Queue에서 처리 중인 메시지가 비정상적으로 많습니다. Backend 처리 실패 또는 삭제 누락을 확인합니다.
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesNotVisible
+      Dimensions: [{Name: QueueName, Value: !GetAtt AiResultQueue.QueueName}]
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 5
+      Threshold: !Ref ResultNotVisibleThreshold
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [HasAlarmTopic, [!Ref AlarmTopicArn], !Ref AWS::NoValue]
+      OKActions: !If [HasAlarmTopic, [!Ref AlarmTopicArn], !Ref AWS::NoValue]
+
+Outputs:
+  AiJobQueueUrl:
+    Description: Backend/AI Worker 환경 변수 AUDIGO_AI_JOB_QUEUE_URL 값입니다.
+    Value: !Ref AiJobQueue
+  AiJobQueueArn:
+    Value: !GetAtt AiJobQueue.Arn
+  AiResultQueueUrl:
+    Description: Backend/AI Worker 환경 변수 AUDIGO_AI_RESULT_QUEUE_URL 값입니다.
+    Value: !Ref AiResultQueue
+  AiResultQueueArn:
+    Value: !GetAtt AiResultQueue.Arn

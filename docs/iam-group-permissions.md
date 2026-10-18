@@ -6,12 +6,12 @@
 
 | 역할 | 책임 | 현재 권한 기준 |
 | --- | --- | --- |
-| `AudigoGitHubInfraDeployRole` | GitHub Actions OIDC 인증, Change Set 생성·조회·실행, 실행 역할 전달 | 기존 7개 스택과 신규 audigo-db |
+| `AudigoGitHubInfraDeployRole` | GitHub Actions OIDC 인증, Change Set 생성·조회·실행, 실행 역할 전달 | 기존 7개 스택과 신규 audigo-db, audigo-sqs |
 | `AudigoCfnCoreExecutionRole` | 네트워크와 DNS | `network.yaml`, `dns.yaml` |
-| `AudigoCfnPlatformExecutionRole` | ECS 공통 클러스터, ALB, 신규 RDS | `ecs-common.yaml`, `alb.yaml`, `db.yaml` |
+| `AudigoCfnPlatformExecutionRole` | ECS 공통 클러스터, ALB, 신규 RDS, AI SQS·알람 | `ecs-common.yaml`, `alb.yaml`, `db.yaml`, `sqs.yaml` |
 | `AudigoCfnAppExecutionRole` | REST API, WebSocket Task Definition, Frontend | `rest-api.yaml`, `websocket.yaml`, `frontend.yaml` |
 
-이 문서는 **현재 편입·검토한 리소스와 신규 DB**를 다룬다. ECR, Cache, SQS, AI API, ACM, 보안 그룹 변경, WAF, DNS 레코드, 모니터링은 이 권한 세트에 포함하지 않는다. RDS 관리형 Secret 생성·태그 및 AWS 관리형 암호화 키 사용만 Platform에 추가하며 Secret 값 조회는 허용하지 않는다.
+이 문서는 **현재 편입·검토한 리소스와 신규 DB·SQS**를 다룬다. ECR, Cache, AI API, ACM, 보안 그룹 변경, WAF, DNS 레코드, 모니터링은 이 권한 세트에 포함하지 않는다. RDS 관리형 Secret 생성·태그 및 AWS 관리형 암호화 키 사용만 Platform에 추가하며 Secret 값 조회는 허용하지 않는다.
 
 > `bootstrap/infra-iam.yaml`은 `cloudformation/` 하위가 아니다. 일반 인프라 CD의 대상에서 제외하고, 별도 관리자 검토·승인으로만 적용한다. GitHub 인프라 배포 역할이 자신의 권한이나 OIDC 신뢰 정책을 수정할 수 없어야 한다.
 
@@ -46,6 +46,7 @@ GitHub Actions (OIDC)
 | Platform | `audigo-ecs-common` | 운영·스테이징 ECS Cluster 2개 | ECS Service, ECS Task Definition, IAM 역할 |
 | Platform | `audigo-alb` | 기존 ALB, HTTPS Listener, Fargate Target Group | Security Group, ACM 인증서, ECS Target 등록 |
 | Platform | `audigo-db` | 신규 private RDS MySQL, DB Subnet Group, DB Parameter Group | 기존 VPC·Subnet·SG 변경, Read Replica, CMK 생성, 앱/CDC 계정 |
+| Platform | `audigo-sqs` | 신규 AI Job/Result Queue, `audigo-sqs-*` 알람 | 메시지 송수신, Queue 삭제·Purge, 런타임 Task Role |
 | App | `audigo-rest-api` | 기존 REST Task Definition, Fargate Service, 기존 Scalable Target | 새 Scaling Policy, Task Role, ECR/Secret/Log 리소스 |
 | App | `audigo-websocket` | 기존 WebSocket Task Definition | WebSocket Service, Auto Scaling, ALB Listener Rule |
 | App | `audigo-frontend` | 기존 S3 Bucket/Policy, CloudFront OAC/Distribution | S3 객체, ACM 인증서, WAF, Cache Policy, Route 53 RecordSet |
@@ -61,6 +62,7 @@ GitHub Actions (OIDC)
 | Core | EC2 `Describe*` | EC2 일부 Describe API는 리소스 수준 권한을 지원하지 않음 | `aws:RequestedRegion` = 배포 리전 |
 | Platform | ELBv2 `Describe*` | 해당 조회 API는 리소스 ARN 제한을 지원하지 않음 | `aws:RequestedRegion` = 배포 리전 |
 | Platform | RDS engine/default parameter 조회, EC2 네트워크 조회 | 해당 조회 API는 리소스 ARN 제한을 제공하지 않음 | `aws:RequestedRegion` = 배포 리전 |
+| Platform | CloudWatch `DescribeAlarms` | 알람 조회는 이름 필터와 함께 호출되나 리전 와일드카드로 허용 | `aws:RequestedRegion` = 배포 리전 |
 | App | ECS `DescribeTaskDefinition`, Auto Scaling `DescribeScalableTargets` | 해당 API는 리소스 수준 권한을 지원하지 않음 | `aws:RequestedRegion` = 배포 리전 |
 | App | CloudFront OAC 조회·수정 | OAC API의 리소스 수준 권한 모델 제한 | OAC 생성·삭제 권한 없음 |
 
@@ -120,3 +122,13 @@ ECR 또는 모니터링 기술 스택이 확정될 때까지 관련 권한은 �
 - AWS 관리형 키와 서비스 연결 역할의 실제 상태, SCP/권한 경계, 정책 시뮬레이션과 CREATE Change Set은 배포 전에 별도로 검증한다.
 
 [RDS 생성 가이드](rds-create.md)와 [RDS 공급자 소스](https://github.com/aws-cloudformation/aws-cloudformation-resource-providers-rds)의 handler 권한을 참고한다. 공급자 권한 목록은 복원·Replica·Aurora까지 포함하므로 이번 템플릿이 사용하는 기능의 API만 반영했다.
+
+## 신규 SQS 생성 권한
+
+`audigo-sqs`는 Platform 실행 역할만 사용한다. GitHub 역할에는 DB와 같은 방식으로 스택 조회, plan subject의 Platform 역할 지정 Change Set 생성, production subject의 실행 범위를 추가한다.
+
+- SQS 쓰기는 `sqs:CreateQueue`, `SetQueueAttributes`, `TagQueue`, `UntagQueue`와 조회 API만 `Audigo-AI-*` Queue로 제한한다. 메시지 송수신, `DeleteQueue`, `PurgeQueue`는 없다.
+- CloudWatch는 `alarm:audigo-sqs-*`에 `PutMetricAlarm`과 태그 API만 허용한다. `DeleteAlarms`는 없다.
+- 런타임 권한(SendMessage/ReceiveMessage 등)은 이 스택 범위가 아니다. Backend/AI Worker Task Role 작업에서 별도로 다룬다.
+
+[SQS 생성 가이드](sqs-create.md)를 참고한다.
