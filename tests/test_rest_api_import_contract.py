@@ -18,9 +18,31 @@ class RestApiImportTests(unittest.TestCase):
         paths.append(str(ROOT / 'cloudformation/rest-api.yaml'))
         result = subprocess.run([executable, "-t", *paths], capture_output=True, text=True)
         self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+    def final(self):
         import yaml  # Installed transitively with cfn-lint in CI.
-        self.assertEqual(self.phase('scalable-target'),
-                         yaml.safe_load((ROOT / 'cloudformation/rest-api.yaml').read_text()))
+        return yaml.safe_load((ROOT / 'cloudformation/rest-api.yaml').read_text())
+
+    def test_final_yaml_leaves_task_definition_to_backend_cd(self):
+        # 2026-10-18 관리 범위 변경: Task Definition은 BE 레포 CD, 태스크 개수는 Auto Scaling이 관리한다.
+        try:
+            final = self.final()
+        except ImportError:
+            self.skipTest("PyYAML unavailable locally; installed with cfn-lint in CI")
+        imported = self.phase('scalable-target')['Resources']
+        self.assertEqual({'AudigoRestService', 'AudigoRestScalableTarget'}, set(final['Resources']))
+        self.assertNotIn('Parameters', final)
+        self.assertEqual(imported['AudigoRestScalableTarget'], final['Resources']['AudigoRestScalableTarget'])
+
+        service = final['Resources']['AudigoRestService']
+        props = service['Properties']
+        self.assertEqual('audigo-backend-Fargate', props['TaskDefinition'])  # family만, 리비전 고정 금지
+        self.assertNotIn('DesiredCount', props)
+        self.assertEqual(('Retain', 'Retain'), (service['DeletionPolicy'], service['UpdateReplacePolicy']))
+        # TaskDefinition·DesiredCount를 제외한 Service 설정은 편입 당시 값 그대로 유지한다.
+        expected = {k: v for k, v in imported['AudigoRestService']['Properties'].items()
+                    if k not in ('TaskDefinition', 'DesiredCount')}
+        self.assertEqual(expected, {k: v for k, v in props.items() if k != 'TaskDefinition'})
 
     def phase(self, name):
         return json.loads((ROOT / f'deploy/imports/rest-api-{name}.json').read_text())
@@ -98,10 +120,12 @@ class RestApiImportTests(unittest.TestCase):
 
     def test_final_yaml_preserves_imported_resources_and_app_role_group(self):
         text = (ROOT / 'cloudformation/rest-api.yaml').read_text()
-        self.assertIn('Type: AWS::ECS::TaskDefinition', text)
+        self.assertNotIn('Type: AWS::ECS::TaskDefinition', text)
+        self.assertNotIn('DesiredCount:', text)
+        self.assertNotIn('task-definition/audigo-backend-Fargate:', text)
         self.assertIn('Type: AWS::ECS::Service', text)
         self.assertIn('Type: AWS::ApplicationAutoScaling::ScalableTarget', text)
-        for logical_id in self.phase('scalable-target')['Resources']:
+        for logical_id in ('AudigoRestService', 'AudigoRestScalableTarget'):
             self.assertIn(f'  {logical_id}:', text)
         self.assertNotIn('PropagateTags:', text)
         self.assertNotIn('\nOutputs:', text)
