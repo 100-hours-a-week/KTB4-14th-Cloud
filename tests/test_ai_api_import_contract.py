@@ -53,7 +53,9 @@ class AiApiImportTests(unittest.TestCase):
         self.assertEqual({'Enable': True, 'Rollback': True, 'ResetOnHealthyTask': False,
                           'ThresholdConfiguration': {'Type': 'BOUNDED_PERCENT', 'Value': 50}},
                          deployment['DeploymentCircuitBreaker'])
-        for absent in ('NetworkConfiguration', 'LoadBalancers', 'ServiceRegistries',
+        self.assertEqual([{'Type': 'spread', 'Field': 'attribute:ecs.availability-zone'},
+                          {'Type': 'spread', 'Field': 'instanceId'}], props['PlacementStrategies'])
+        for absent in ('NetworkConfiguration', 'LoadBalancers', 'ServiceRegistries', 'PlacementConstraints',
                        'PropagateTags', 'CapacityProviderStrategy', 'PlatformVersion'):
             self.assertNotIn(absent, props)
 

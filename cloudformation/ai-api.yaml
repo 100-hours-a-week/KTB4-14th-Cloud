@@ -42,4 +42,10 @@ Resources:
       EnableECSManagedTags: true
       EnableExecuteCommand: false
       AvailabilityZoneRebalancing: DISABLED
+      # EC2 실행 방식의 현재 배치 전략입니다(조회 결과 그대로). 배치 제약(PlacementConstraints)은 없습니다.
+      PlacementStrategies:
+        - Type: spread
+          Field: attribute:ecs.availability-zone
+        - Type: spread
+          Field: instanceId
       # 로드 밸런서, 서비스 디스커버리, awsvpc 네트워크 설정은 조회 결과 없음
