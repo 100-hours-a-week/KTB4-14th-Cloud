@@ -1,0 +1,253 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Audigo V2 Backend와 AI Worker ECS Task Role 및 SQS 런타임 권한입니다.
+  Task Definition은 각 앱 CD(Backend: BE 레포, AI: ai-deploy.yml)가 관리하고 이 스택은 역할과 권한만 관리합니다.
+  CloudFormation 실행 역할은 IAM을 관리하지 않으므로 infra-iam.yaml과 같이 승인된 관리자가 별도 스택으로 배포합니다.
+
+# 관리 경계 (docs: ECS Task Definition IaC 관리 범위 조정)
+# - IaC(이 스택): Task Role 자체, SQS 권한, 앱 CD 배포 역할이 Task Role을 넘길 수 있는 iam:PassRole
+# - 앱 CD: Task Definition의 taskRoleArn, AWS_REGION, AUDIGO_AI_*_QUEUE_URL 환경 변수
+#
+# 주의:
+# - 이 템플릿은 cloudformation/ 디렉터리에 두지 않아 일반 infra_batch 배포 대상에 포함되지 않습니다.
+# - 기존 Task Role이 있으면 이름을 파라미터로 넘겨 정책만 연결하고, 비워 두면 새 Task Role을 만듭니다.
+#   AI Worker는 Task Protection과 SSM 활성 버전 조회를 이미 쓰고 있으므로 기존 Task Role 연결을 우선합니다.
+#   새 AI Worker Task Role을 만들 때만 그 두 권한을 함께 부여합니다.
+# - Queue ARN은 cloudformation/sqs.yaml의 고정 물리 이름으로 구성합니다. 이름을 바꾸면 두 파일을 함께 수정합니다.
+# - 1MiB 초과 결과의 S3 전달은 아직 도입하지 않습니다. 도입 시 Worker s3:PutObject, Backend s3:GetObject를 별도 Statement로 추가합니다.
+
+Parameters:
+  ExistingBackendTaskRoleName:
+    Type: String
+    Default: ''
+    AllowedPattern: '^$|^[\w+=,.@-]{1,64}$'
+    Description: 기존 Backend Task Role 이름입니다. 비워 두면 audigo-backend-task-role을 생성합니다.
+  ExistingAiWorkerTaskRoleName:
+    Type: String
+    Default: ''
+    AllowedPattern: '^$|^[\w+=,.@-]{1,64}$'
+    Description: 기존 AI Worker Task Role 이름입니다. 비워 두면 audigo-ai-worker-task-role을 생성합니다.
+  BackendDeployRoleName:
+    Type: String
+    Default: ''
+    AllowedPattern: '^$|^[\w+=,.@-]{1,64}$'
+    Description: BE 레포 CD가 Task Definition을 등록할 때 쓰는 IAM 역할 이름입니다. 지정하면 Backend Task Role PassRole을 연결합니다.
+  AiDeployRoleName:
+    Type: String
+    Default: ''
+    AllowedPattern: '^$|^[\w+=,.@-]{1,64}$'
+    Description: ai-deploy.yml이 쓰는 IAM 역할(vars.AWS_ROLE_ARN) 이름입니다. 지정하면 AI Worker Task Role PassRole을 연결합니다.
+  EcsClusterName:
+    Type: String
+    Default: audigo-ecs-cluster
+    AllowedPattern: '^[A-Za-z0-9_-]{1,255}$'
+    Description: AI Worker가 실행되는 ECS 클러스터입니다. 새 AI Worker Task Role의 Task Protection 범위에 사용합니다.
+  AiActiveVersionParameterName:
+    Type: String
+    Default: /audigo/prod/ai/active-worker-version
+    AllowedPattern: '^/[\w./-]+$'
+    Description: ai-deploy.yml의 vars.AI_ACTIVE_VERSION_PARAM 값입니다. 새 AI Worker Task Role의 조회 범위에 사용합니다.
+
+Conditions:
+  CreateBackendTaskRole: !Equals [!Ref ExistingBackendTaskRoleName, '']
+  CreateAiWorkerTaskRole: !Equals [!Ref ExistingAiWorkerTaskRoleName, '']
+  HasBackendDeployRole: !Not [!Equals [!Ref BackendDeployRoleName, '']]
+  HasAiDeployRole: !Not [!Equals [!Ref AiDeployRoleName, '']]
+
+Resources:
+  # ---------- Task Role ----------
+  BackendTaskRole:
+    Type: AWS::IAM::Role
+    Condition: CreateBackendTaskRole
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      RoleName: audigo-backend-task-role
+      Description: ECS task role for the Audigo backend. Sends AI jobs and consumes AI results via SQS.
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: EcsTasksInThisAccountOnly
+            Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+              ArnLike:
+                aws:SourceArn: !Sub 'arn:${AWS::Partition}:ecs:${AWS::Region}:${AWS::AccountId}:*'
+
+  AiWorkerTaskRole:
+    Type: AWS::IAM::Role
+    Condition: CreateAiWorkerTaskRole
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      RoleName: audigo-ai-worker-task-role
+      Description: ECS task role for the Audigo AI worker. Consumes AI jobs and sends AI results via SQS.
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: EcsTasksInThisAccountOnly
+            Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+              ArnLike:
+                aws:SourceArn: !Sub 'arn:${AWS::Partition}:ecs:${AWS::Region}:${AWS::AccountId}:*'
+
+  # ---------- SQS 런타임 권한 ----------
+  # Backend: Job Queue Producer, Result Queue Consumer
+  BackendSqsPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      ManagedPolicyName: AudigoBackendAiSqsAccess
+      Description: Backend - send to AI Job Queue, consume AI Result Queue.
+      Roles:
+        - !If [CreateBackendTaskRole, !Ref BackendTaskRole, !Ref ExistingBackendTaskRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: SendAiJobs
+            Effect: Allow
+            Action: sqs:SendMessage
+            Resource: !Sub 'arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:Audigo-AI-Job-Queue'
+          - Sid: ConsumeAiResults
+            Effect: Allow
+            Action:
+              - sqs:ReceiveMessage
+              - sqs:DeleteMessage
+              - sqs:ChangeMessageVisibility
+            Resource: !Sub 'arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:Audigo-AI-Result-Queue'
+          - Sid: ReadAiQueueAttributes
+            Effect: Allow
+            Action: sqs:GetQueueAttributes
+            Resource:
+              - !Sub 'arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:Audigo-AI-Job-Queue'
+              - !Sub 'arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:Audigo-AI-Result-Queue'
+
+  # AI Worker: Job Queue Consumer, Result Queue Producer
+  AiWorkerSqsPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      ManagedPolicyName: AudigoAiWorkerSqsAccess
+      Description: AI Worker - consume AI Job Queue, send to AI Result Queue.
+      Roles:
+        - !If [CreateAiWorkerTaskRole, !Ref AiWorkerTaskRole, !Ref ExistingAiWorkerTaskRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: ConsumeAiJobs
+            Effect: Allow
+            Action:
+              - sqs:ReceiveMessage
+              - sqs:DeleteMessage
+              - sqs:ChangeMessageVisibility
+            Resource: !Sub 'arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:Audigo-AI-Job-Queue'
+          - Sid: SendAiResults
+            Effect: Allow
+            Action: sqs:SendMessage
+            Resource: !Sub 'arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:Audigo-AI-Result-Queue'
+          - Sid: ReadAiQueueAttributes
+            Effect: Allow
+            Action: sqs:GetQueueAttributes
+            Resource:
+              - !Sub 'arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:Audigo-AI-Job-Queue'
+              - !Sub 'arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:Audigo-AI-Result-Queue'
+
+  # 새 AI Worker Task Role에만 연결합니다. 기존 역할은 이미 이 권한을 가지고 있어야 합니다.
+  # ai-deploy.yml 드레이닝 흐름: Worker가 Task Protection을 켜고 끄며, 활성 Worker 버전을 SSM에서 조회합니다.
+  AiWorkerRuntimePolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Condition: CreateAiWorkerTaskRole
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      ManagedPolicyName: AudigoAiWorkerDrainRuntime
+      Description: AI Worker - task scale-in protection and active worker version lookup used by ai-deploy draining.
+      Roles:
+        - !Ref AiWorkerTaskRole
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: ManageOwnTaskProtection
+            Effect: Allow
+            Action:
+              - ecs:GetTaskProtection
+              - ecs:UpdateTaskProtection
+            Resource: !Sub 'arn:${AWS::Partition}:ecs:${AWS::Region}:${AWS::AccountId}:task/${EcsClusterName}/*'
+          - Sid: ReadActiveWorkerVersion
+            Effect: Allow
+            Action: ssm:GetParameter
+            Resource: !Sub 'arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${AiActiveVersionParameterName}'
+
+  # ---------- 앱 CD가 Task Role을 Task Definition에 연결하기 위한 PassRole ----------
+  BackendDeployPassTaskRolePolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Condition: HasBackendDeployRole
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      ManagedPolicyName: AudigoBackendDeployPassTaskRole
+      Description: Backend CD - pass only the backend task role to ECS tasks.
+      Roles:
+        - !Ref BackendDeployRoleName
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: PassBackendTaskRoleToEcsTasks
+            Effect: Allow
+            Action: iam:PassRole
+            Resource: !If
+              - CreateBackendTaskRole
+              - !GetAtt BackendTaskRole.Arn
+              - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ExistingBackendTaskRoleName}'
+            Condition:
+              StringEquals:
+                iam:PassedToService: ecs-tasks.amazonaws.com
+
+  AiDeployPassTaskRolePolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Condition: HasAiDeployRole
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      ManagedPolicyName: AudigoAiDeployPassTaskRole
+      Description: AI deploy workflow - pass only the AI worker task role to ECS tasks.
+      Roles:
+        - !Ref AiDeployRoleName
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: PassAiWorkerTaskRoleToEcsTasks
+            Effect: Allow
+            Action: iam:PassRole
+            Resource: !If
+              - CreateAiWorkerTaskRole
+              - !GetAtt AiWorkerTaskRole.Arn
+              - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ExistingAiWorkerTaskRoleName}'
+            Condition:
+              StringEquals:
+                iam:PassedToService: ecs-tasks.amazonaws.com
+
+Outputs:
+  BackendTaskRoleArn:
+    Description: BE 레포 task-definition.json의 taskRoleArn에 지정합니다.
+    Value: !If
+      - CreateBackendTaskRole
+      - !GetAtt BackendTaskRole.Arn
+      - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ExistingBackendTaskRoleName}'
+  AiWorkerTaskRoleArn:
+    Description: ai-deploy.yml이 쓰는 AI Worker Task Definition의 taskRoleArn에 지정합니다.
+    Value: !If
+      - CreateAiWorkerTaskRole
+      - !GetAtt AiWorkerTaskRole.Arn
+      - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ExistingAiWorkerTaskRoleName}'
