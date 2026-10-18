@@ -61,7 +61,7 @@ class IamBootstrapTests(unittest.TestCase):
         groups = {
             "Core": ("audigo-network", "audigo-dns", "AudigoCfnCoreExecutionRole.Arn"),
             "Platform": ("audigo-ecs-common", "audigo-alb", "audigo-db", "audigo-sqs", "AudigoCfnPlatformExecutionRole.Arn"),
-            "App": ("audigo-rest-api", "audigo-websocket", "audigo-frontend", "AudigoCfnAppExecutionRole.Arn"),
+            "App": ("audigo-rest-api", "audigo-ai-api", "audigo-websocket", "audigo-frontend", "AudigoCfnAppExecutionRole.Arn"),
         }
         for group, expected in groups.items():
             start = self.text.index(f"Sid: PlanCreates{group}ChangeSetWith{group}ExecutionRole")
@@ -97,7 +97,7 @@ class IamBootstrapTests(unittest.TestCase):
         self.assertNotIn("s3:GetBucketEncryption", self.text)
         self.assertNotIn("s3:PutBucketEncryption", self.text)
         self.assertIn("ecs:UpdateCluster", self.text)
-        for sid in ("ReadManagedEcsClusters", "ReadManagedRestService", "ReadManagedTaskDefinitions"):
+        for sid in ("ReadManagedEcsClusters", "ReadManagedRestService", "ReadManagedAiService", "ReadManagedTaskDefinitions"):
             start = self.text.index(f"Sid: {sid}")
             end = self.text.find("\n              - Sid:", start + 1)
             block = self.text[start : None if end == -1 else end]

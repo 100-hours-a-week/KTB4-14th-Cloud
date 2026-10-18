@@ -1,5 +1,48 @@
 # REST API 기존 리소스 편입 기록 및 절차
 
+## 2026-10-18 관리 범위 변경 (Task Definition 제외)
+
+Task Definition은 BE 레포 CD가 배포마다 새 리비전을 등록하므로 이 스택의 관리 대상에서 제외합니다.
+아래 "현재 상태" 이하는 편입 당시(`:5`) 기록이며 그대로 유지합니다.
+
+| 대상 | 관리 주체 |
+|---|---|
+| Task Definition (이미지, 환경 변수, Secrets, taskRoleArn) | BE 레포 CD |
+| ECS Service (네트워크, ALB 연결, 배포 설정) | 이 스택 |
+| Service가 쓰는 리비전 | family 이름 `audigo-backend-Fargate` 참조 (최신 ACTIVE 리비전) |
+| 실행 태스크 개수 | Auto Scaling (`DesiredCount` 미선언, 최소 1 / 최대 2는 이 스택) |
+| 배포 실패 리비전 | BE 레포 CD가 실패 시 deregister |
+
+### 적용 절차 (관리자 수동)
+
+`AudigoRestTaskDefinition` 제거(Remove)는 CD가 차단하므로 PR 병합 **전에** 수동 Change Set으로 적용합니다.
+`Retain`이라 실제 Task Definition은 삭제되지 않습니다.
+
+1. 실행 중인 리비전이 family의 최신 ACTIVE 리비전인지 확인합니다. 다르면 family 지정 시 그 최신 리비전으로 배포되므로 중단합니다.
+   ```bash
+   aws ecs describe-services --cluster audigo-ecs-cluster --services audigo-backend-Fargate-service \
+     --query 'services[0].taskDefinition' --output text
+   aws ecs describe-task-definition --task-definition audigo-backend-Fargate \
+     --query 'taskDefinition.taskDefinitionArn' --output text
+   ```
+2. PR 브랜치의 템플릿으로 Change Set을 만들고 확인합니다.
+   ```bash
+   aws cloudformation create-change-set --stack-name audigo-rest-api \
+     --change-set-name remove-task-definition \
+     --template-body file://cloudformation/rest-api.yaml \
+     --parameters file://deploy/parameters/rest-api.json \
+     --role-arn <AudigoCfnAppExecutionRole ARN>
+   aws cloudformation describe-change-set --stack-name audigo-rest-api \
+     --change-set-name remove-task-definition \
+     --query 'Changes[].ResourceChange.[Action,LogicalResourceId,Replacement]' --output table
+   ```
+   `Remove AudigoRestTaskDefinition`, `Modify AudigoRestService (Replacement: False)` 2건만 나와야 합니다. 다른 항목이나 교체가 보이면 실행하지 않습니다.
+3. Change Set을 실행하고 서비스가 같은 리비전에서 steady state인지 확인합니다.
+4. PR을 병합합니다. CD 계획에서 `audigo-rest-api`는 변경 없음으로 나와야 합니다.
+5. `scripts/drift-check.sh`로 드리프트를 다시 확인합니다.
+
+후속 작업: App 실행 역할의 `ManageRestApiTaskDefinition` 권한 회수(`bootstrap/infra-iam.yaml`, 관리자 적용).
+
 ## 현재 상태
 
 2026-10-14 사용자 제공 CLI 및 편입 완료 보고를 기준으로 작성했습니다.

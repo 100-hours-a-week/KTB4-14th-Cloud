@@ -109,6 +109,7 @@
       "name": "audigo-ai-api",
       "template": "cloudformation/ai-api.yaml",
       "parameters": "deploy/parameters/ai-api.json",
+      "role_group": "app",
       "enabled": false,
       "allow_create": false,
       "depends_on": [],

@@ -3,15 +3,12 @@ name: AI Worker Production Deploy
 # Release PR이 main에 병합되면 Release 파일에 지정된 이미지를 재빌드 없이 배포한다.
 #
 # 신규 Task Definition 등록·ECS Service 업데이트
+# → (최대 100% / 최소 0%) 기존 Worker 종료 → 신규 Worker 실행
+#    기존 Worker가 작업 중이면 Task Protection 해제 시까지 ECS가 종료를 보류
 # → 신규 Worker 실행·준비 상태 확인
 # → 활성 Worker Version 전환 (SSM Parameter)
-# → 기존 Worker 신규 메시지 수신 중단 ─┐
-# → 기존 Worker 진행 중 작업 완료       │ Worker 코드가 수행
-# → 결과 저장·결과 Queue 전송 성공 확인  │ (Task Protection으로 ECS의 종료를 보류)
-# → 요청 메시지 삭제                    │
-# → Task Protection 해제 ──────────────┘
-# → 기존 Worker 종료 (ECS)
 # → ECS 안정화·목표 버전 확인
+# ※ 기존 Worker 드레이닝 대기 스텝은 EC2 여유 용량 부족으로 비활성화 (2026-10-19)
 on:
   push:
     branches: [main]
@@ -154,44 +151,50 @@ jobs:
             --value "$WORKER_VERSION" --type String --overwrite > /dev/null
           echo "활성 Worker Version → ${WORKER_VERSION}"
 
-      - name: 기존 Worker 드레이닝 대기 (진행 중 작업 완료 → Task Protection 해제 → 종료)
-        env:
-          NEW_TD: ${{ steps.deploy.outputs.task-definition-arn }}
-        run: |
-          deadline=$((SECONDS + DRAIN_TIMEOUT_MINUTES * 60))
-          while :; do
-            SVC=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" --query 'services[0]')
-            DEPLOYMENTS=$(jq '.deployments | length' <<<"$SVC")
-            PRIMARY_STATE=$(jq -r '.deployments[] | select(.status == "PRIMARY") | .rolloutState' <<<"$SVC")
-
-            # 기존 Deployment가 모두 사라지고 PRIMARY가 COMPLETED면 드레이닝 완료
-            if [ "$DEPLOYMENTS" = "1" ] && [ "$PRIMARY_STATE" = "COMPLETED" ]; then
-              echo "기존 Worker 종료 완료"
-              break
-            fi
-
-            TASKS=$(aws ecs list-tasks --cluster "$CLUSTER" --service-name "$SERVICE" \
-              --desired-status RUNNING --query 'taskArns' --output text)
-            OLD_TASKS=""
-            if [ -n "$TASKS" ] && [ "$TASKS" != "None" ]; then
-              OLD_TASKS=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks $TASKS \
-                --query "tasks[?taskDefinitionArn!='${NEW_TD}'].taskArn" --output text)
-            fi
-
-            if [ -n "$OLD_TASKS" ] && [ "$OLD_TASKS" != "None" ]; then
-              PROTECTED=$(aws ecs get-task-protection --cluster "$CLUSTER" --tasks $OLD_TASKS \
-                --query 'length(protectedTasks[?protectionEnabled])' --output text)
-              echo "기존 Worker $(wc -w <<<"$OLD_TASKS")개 남음 (작업 중·Task Protection 활성: ${PROTECTED}개)"
-            else
-              echo "기존 Worker 종료 대기 중 (Deployment ${DEPLOYMENTS}개, PRIMARY=${PRIMARY_STATE})"
-            fi
-
-            if [ "$SECONDS" -ge "$deadline" ]; then
-              echo "::error::드레이닝 시간 초과 (${DRAIN_TIMEOUT_MINUTES}분). 기존 Worker의 작업 상태를 확인하세요."
-              exit 1
-            fi
-            sleep 30
-          done
+      # [2026-10-19 비활성화] 기존 Worker 드레이닝 대기
+      # EC2 인스턴스 여유 용량이 없어 서비스 배포 설정이 최대 100% / 최소 0%입니다.
+      # 이 설정에서는 ECS가 기존 Worker를 먼저 종료한 뒤 신규 Worker를 실행하므로,
+      # "신규 Worker 실행 → 기존 Worker 드레이닝" 순서가 성립하지 않습니다.
+      # 진행 중 작업은 Task Protection이 해제될 때까지 ECS가 기존 Worker 종료를 보류하는 방식으로 보호됩니다.
+      # 용량을 확보해 최대 200%로 바꾸면 아래 스텝을 다시 활성화합니다.
+      # - name: 기존 Worker 드레이닝 대기 (진행 중 작업 완료 → Task Protection 해제 → 종료)
+      #   env:
+      #     NEW_TD: ${{ steps.deploy.outputs.task-definition-arn }}
+      #   run: |
+      #     deadline=$((SECONDS + DRAIN_TIMEOUT_MINUTES * 60))
+      #     while :; do
+      #       SVC=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" --query 'services[0]')
+      #       DEPLOYMENTS=$(jq '.deployments | length' <<<"$SVC")
+      #       PRIMARY_STATE=$(jq -r '.deployments[] | select(.status == "PRIMARY") | .rolloutState' <<<"$SVC")
+      #
+      #       # 기존 Deployment가 모두 사라지고 PRIMARY가 COMPLETED면 드레이닝 완료
+      #       if [ "$DEPLOYMENTS" = "1" ] && [ "$PRIMARY_STATE" = "COMPLETED" ]; then
+      #         echo "기존 Worker 종료 완료"
+      #         break
+      #       fi
+      #
+      #       TASKS=$(aws ecs list-tasks --cluster "$CLUSTER" --service-name "$SERVICE" \
+      #         --desired-status RUNNING --query 'taskArns' --output text)
+      #       OLD_TASKS=""
+      #       if [ -n "$TASKS" ] && [ "$TASKS" != "None" ]; then
+      #         OLD_TASKS=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks $TASKS \
+      #           --query "tasks[?taskDefinitionArn!='${NEW_TD}'].taskArn" --output text)
+      #       fi
+      #
+      #       if [ -n "$OLD_TASKS" ] && [ "$OLD_TASKS" != "None" ]; then
+      #         PROTECTED=$(aws ecs get-task-protection --cluster "$CLUSTER" --tasks $OLD_TASKS \
+      #           --query 'length(protectedTasks[?protectionEnabled])' --output text)
+      #         echo "기존 Worker $(wc -w <<<"$OLD_TASKS")개 남음 (작업 중·Task Protection 활성: ${PROTECTED}개)"
+      #       else
+      #         echo "기존 Worker 종료 대기 중 (Deployment ${DEPLOYMENTS}개, PRIMARY=${PRIMARY_STATE})"
+      #       fi
+      #
+      #       if [ "$SECONDS" -ge "$deadline" ]; then
+      #         echo "::error::드레이닝 시간 초과 (${DRAIN_TIMEOUT_MINUTES}분). 기존 Worker의 작업 상태를 확인하세요."
+      #         exit 1
+      #       fi
+      #       sleep 30
+      #     done
 
       - name: ECS 안정화·목표 버전 확인
         env:

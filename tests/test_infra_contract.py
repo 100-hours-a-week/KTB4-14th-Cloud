@@ -19,7 +19,7 @@ class ContractTests(unittest.TestCase):
             'audigo-ecs-common': 'platform', 'audigo-alb': 'platform',
             'audigo-db': 'platform', 'audigo-sqs': 'platform',
             'audigo-frontend': 'app', 'audigo-rest-api': 'app',
-            'audigo-websocket': 'app',
+            'audigo-websocket': 'app', 'audigo-ai-api': 'app',
         }
         for stack in stacks:
             if stack['name'] in expected:

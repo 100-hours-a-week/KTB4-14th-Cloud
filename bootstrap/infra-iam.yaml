@@ -81,6 +81,7 @@ Resources:
                   - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-db/*'
                   - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-sqs/*'
                   - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-rest-api/*'
+                  - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-ai-api/*'
                   - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-websocket/*'
                   - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-frontend/*'
                 Condition:
@@ -120,6 +121,7 @@ Resources:
                 Action: cloudformation:CreateChangeSet
                 Resource:
                   - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-rest-api/*'
+                  - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-ai-api/*'
                   - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-websocket/*'
                   - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-frontend/*'
                 Condition:
@@ -142,6 +144,7 @@ Resources:
                   - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-db/*'
                   - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-sqs/*'
                   - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-rest-api/*'
+                  - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-ai-api/*'
                   - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-websocket/*'
                   - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-frontend/*'
                 Condition:
@@ -485,7 +488,7 @@ Resources:
     UpdateReplacePolicy: Retain
     Properties:
       RoleName: AudigoCfnAppExecutionRole
-      Description: CloudFormation execution role for Audigo REST API, WebSocket and frontend stacks.
+      Description: CloudFormation execution role for Audigo REST API, AI worker service, WebSocket and frontend stacks.
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -556,6 +559,26 @@ Resources:
                   - ecs:UntagResource
                   - ecs:UpdateService
                 Resource: !Sub 'arn:${AWS::Partition}:ecs:${AWS::Region}:${TargetAccountId}:service/audigo-ecs-cluster/audigo-backend-Fargate-service'
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion: !Ref AWS::Region
+              # AI Worker Service: 서비스 설정만 관리합니다. Task Definition은 ai-deploy.yml이 등록합니다.
+              - Sid: ReadManagedAiService
+                Effect: Allow
+                Action:
+                  - ecs:DescribeServices
+                  - ecs:ListTagsForResource
+                Resource: !Sub 'arn:${AWS::Partition}:ecs:${AWS::Region}:${TargetAccountId}:service/audigo-ecs-cluster/audigo-mock-ai-service'
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion: !Ref AWS::Region
+              - Sid: UpdateManagedAiService
+                Effect: Allow
+                Action:
+                  - ecs:TagResource
+                  - ecs:UntagResource
+                  - ecs:UpdateService
+                Resource: !Sub 'arn:${AWS::Partition}:ecs:${AWS::Region}:${TargetAccountId}:service/audigo-ecs-cluster/audigo-mock-ai-service'
                 Condition:
                   StringEquals:
                     aws:RequestedRegion: !Ref AWS::Region
