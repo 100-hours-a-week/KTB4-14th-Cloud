@@ -122,12 +122,12 @@ class IamGroupTests(unittest.TestCase):
         self.assertEqual("platform", groups["audigo-ecs-common"])
         self.assertEqual("platform", groups["audigo-db"])
         self.assertEqual("platform", groups["audigo-sqs"])
+        self.assertEqual("platform", groups["audigo-cache"])
         self.assertEqual("app", groups["audigo-frontend"])
         self.assertEqual("app", groups["audigo-rest-api"])
         self.assertEqual("app", groups["audigo-websocket"])
         self.assertEqual("app", groups["audigo-ai-api"])
-        for name in ("audigo-cache", "audigo-monitoring"):
-            self.assertIsNone(groups[name])
+        self.assertIsNone(groups["audigo-monitoring"])
 
         workflow = (ROOT / ".github/workflows/cloudformation-cd.yml").read_text(encoding="utf-8")
         self.assertEqual(2, workflow.count("role-to-assume: ${{ vars.INFRA_DEPLOY_ROLE_ARN }}"))

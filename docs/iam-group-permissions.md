@@ -8,10 +8,10 @@
 | --- | --- | --- |
 | `AudigoGitHubInfraDeployRole` | GitHub Actions OIDC 인증, Change Set 생성·조회·실행, 실행 역할 전달 | 기존 7개 스택과 신규 audigo-db, audigo-sqs |
 | `AudigoCfnCoreExecutionRole` | 네트워크와 DNS | `network.yaml`, `dns.yaml` |
-| `AudigoCfnPlatformExecutionRole` | ECS 공통 클러스터, ALB, 신규 RDS, AI SQS·알람 | `ecs-common.yaml`, `alb.yaml`, `db.yaml`, `sqs.yaml` |
+| `AudigoCfnPlatformExecutionRole` | ECS 공통 클러스터, ALB, 신규 RDS, AI SQS·알람, 세션 캐시 | `ecs-common.yaml`, `alb.yaml`, `db.yaml`, `sqs.yaml`, `cache.yaml` |
 | `AudigoCfnAppExecutionRole` | REST API, WebSocket Task Definition, Frontend | `rest-api.yaml`, `websocket.yaml`, `frontend.yaml` |
 
-이 문서는 **현재 편입·검토한 리소스와 신규 DB·SQS**를 다룬다. ECR, Cache, AI API, ACM, 보안 그룹 변경, WAF, DNS 레코드, 모니터링은 이 권한 세트에 포함하지 않는다. RDS 관리형 Secret 생성·태그 및 AWS 관리형 암호화 키 사용만 Platform에 추가하며 Secret 값 조회는 허용하지 않는다.
+이 문서는 **현재 편입·검토한 리소스와 신규 DB·SQS**를 다룬다. ECR, AI API, ACM, 기존 보안 그룹 변경(세션 캐시 전용 SG 생성 제외), WAF, DNS 레코드, 모니터링은 이 권한 세트에 포함하지 않는다. RDS 관리형 Secret 생성·태그 및 AWS 관리형 암호화 키 사용만 Platform에 추가하며 Secret 값 조회는 허용하지 않는다.
 
 > `bootstrap/infra-iam.yaml`은 `cloudformation/` 하위가 아니다. 일반 인프라 CD의 대상에서 제외하고, 별도 관리자 검토·승인으로만 적용한다. GitHub 인프라 배포 역할이 자신의 권한이나 OIDC 신뢰 정책을 수정할 수 없어야 한다.
 
@@ -47,6 +47,7 @@ GitHub Actions (OIDC)
 | Platform | `audigo-alb` | 기존 ALB, HTTPS Listener, Fargate Target Group | Security Group, ACM 인증서, ECS Target 등록 |
 | Platform | `audigo-db` | 신규 private RDS MySQL, DB Subnet Group, DB Parameter Group | 기존 VPC·Subnet·SG 변경, Read Replica, CMK 생성, 앱/CDC 계정 |
 | Platform | `audigo-sqs` | 신규 AI Job/Result Queue, `audigo-sqs-*` 알람 | 메시지 송수신, Queue 삭제·Purge, 런타임 Task Role |
+| Platform | `audigo-cache` | 신규 Serverless Valkey `audigo-session`, `audigo-default-off` 사용자, `audigo-session-users` 그룹, 캐시 전용 SG | 앱 사용자 `audigo`·비밀번호(관리자가 `audigo/v1/backend`에서 수동 관리), 캐시·사용자·SG 삭제 |
 | App | `audigo-rest-api` | 기존 REST Task Definition, Fargate Service, 기존 Scalable Target | 새 Scaling Policy, Task Role, ECR/Secret/Log 리소스 |
 | App | `audigo-websocket` | 기존 WebSocket Task Definition | WebSocket Service, Auto Scaling, ALB Listener Rule |
 | App | `audigo-frontend` | 기존 S3 Bucket/Policy, CloudFront OAC/Distribution | S3 객체, ACM 인증서, WAF, Cache Policy, Route 53 RecordSet |
