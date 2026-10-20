@@ -3,6 +3,6 @@
 # - 값은 AI 레포 "AI Image CD" 실행 결과(Job Summary)를 그대로 옮긴다.
 # - main 병합 시 image_digest로 지정된 이미지를 재빌드 없이 배포한다.
 service: ai-worker
-version: 0.1.1
-commit_sha: a957e7373bba267a97613c93cebec54cd8a9fa35
-image_digest: sha256:e78c216367ff296a9ebe846e07e529033df2ce1c0e923b239090e13e3fedc048
+version: 0.2.0
+commit_sha: 764359fe6310c7cd77d9b9122fbb2e169f949dd3
+image_digest: sha256:bed013db8f471bc11277b8452d0d3620f79fb0d91018398d14e2e2349ef901c0
