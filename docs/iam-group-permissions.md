@@ -47,7 +47,7 @@ GitHub Actions (OIDC)
 | Platform | `audigo-alb` | 기존 ALB, HTTPS Listener, Fargate Target Group | Security Group, ACM 인증서, ECS Target 등록 |
 | Platform | `audigo-db` | 신규 private RDS MySQL, DB Subnet Group, DB Parameter Group | 기존 VPC·Subnet·SG 변경, Read Replica, CMK 생성, 앱/CDC 계정 |
 | Platform | `audigo-sqs` | 신규 AI Job/Result Queue, `audigo-sqs-*` 알람 | 메시지 송수신, Queue 삭제·Purge, 런타임 Task Role |
-| Platform | `audigo-cache` | 신규 Serverless Valkey `audigo-session`, `audigo-default-off` 사용자, `audigo-session-users` 그룹, 캐시 전용 SG | 앱 사용자 `audigo`·비밀번호(관리자가 `audigo/v1/backend`에서 수동 관리), 캐시·사용자·SG 삭제 |
+| Platform | `audigo-cache` | 신규 Serverless Valkey `audigo-session`, `audigo-session-users` 그룹, 캐시 전용 SG | 앱 사용자 `audigo`·비밀번호(관리자가 `audigo/v1/backend`에서 수동 관리), 캐시·사용자·SG 삭제 |
 | App | `audigo-rest-api` | 기존 REST Task Definition, Fargate Service, 기존 Scalable Target | 새 Scaling Policy, Task Role, ECR/Secret/Log 리소스 |
 | App | `audigo-websocket` | 기존 WebSocket Task Definition | WebSocket Service, Auto Scaling, ALB Listener Rule |
 | App | `audigo-frontend` | 기존 S3 Bucket/Policy, CloudFront OAC/Distribution | S3 객체, ACM 인증서, WAF, Cache Policy, Route 53 RecordSet |

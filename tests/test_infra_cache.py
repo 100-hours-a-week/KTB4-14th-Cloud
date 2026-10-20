@@ -54,15 +54,14 @@ class CacheStackTests(unittest.TestCase):
         [egress] = sg['SecurityGroupEgress']
         self.assertEqual('127.0.0.1/32', egress['CidrIp'])
 
-    def test_password_user_lives_in_admin_stack_and_default_user_is_disabled(self):
-        users = {u['UserName']: u for u in self.of_type('AWS::ElastiCache::User')}
-        self.assertEqual({'default'}, set(users))  # 비밀번호 사용자는 CD 스택에 두지 않는다.
-        default = users['default']
-        self.assertTrue(default['AccessString'].startswith('off'))
-        self.assertEqual('audigo-default-off', default['UserId'])  # AWS 기본 default(on nopass)를 쓰지 않는다.
+    def test_password_user_lives_in_admin_stack_and_valkey_group_has_no_default_user(self):
+        # 비밀번호 사용자는 CD 스택에 두지 않는다. Valkey는 no-password-required 사용자를 허용하지 않고,
+        # Valkey 사용자 그룹은 default 사용자 없이 무인증 연결을 막으므로 사용자를 정의하지 않는다.
+        self.assertEqual([], self.of_type('AWS::ElastiCache::User'))
         [group] = self.of_type('AWS::ElastiCache::UserGroup')
+        self.assertEqual('valkey', group['Engine'])
         self.assertEqual('audigo-session-users', group['UserGroupId'])
-        self.assertEqual([{'Ref': 'DisabledDefaultUser'}, APP_USER], group['UserIds'])
+        self.assertEqual([APP_USER], group['UserIds'])
 
         # 비밀번호 사용자와 Secret은 IaC 어디에도 정의하지 않는다(관리자가 audigo/v1/backend에서 관리).
         for path in ('cloudformation/cache.yaml', 'bootstrap/infra-iam.yaml'):

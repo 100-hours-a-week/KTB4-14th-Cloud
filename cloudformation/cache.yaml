@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
-  Audigo 세션 저장용 ElastiCache Serverless(Valkey)와 전용 보안 그룹, 사용자 그룹과 비활성 default 사용자를 신규 생성합니다.
+  Audigo 세션 저장용 ElastiCache Serverless(Valkey)와 전용 보안 그룹, 사용자 그룹을 신규 생성합니다.
   기존 VPC와 Private Subnet은 참조만 합니다.
 
 # 작성 기준: 2026-10-19 "세션 관리용 ElastiCache Serverless(Valkey) 구축 요청"
@@ -10,7 +10,8 @@ Description: >
 # - 인증: 비밀번호 인증. 앱 사용자 audigo는 관리자가 IaC 밖에서 직접 만들고, 비밀번호는 기존 Secret audigo/v1/backend의
 #   REDIS_PASSWORD 키로 관리합니다(docs/cache-create.md).
 #   IaC가 비밀번호를 읽거나 다루지 않도록 이 스택은 사용자 ID만 고정 문자열로 참조합니다.
-#   사용자 그룹의 default 사용자는 접근 문자열 off로 비활성화해 무인증 연결을 막습니다.
+#   Valkey 사용자 그룹은 default 사용자가 필요 없고, 연결하면 default 사용자가 꺼져 무인증 연결이 막힙니다.
+#   Valkey 사용자는 no-password-required 인증을 쓸 수 없어 비활성 default 사용자를 따로 만들지 않습니다.
 # - 전송 중/저장 시 암호화는 Serverless에서 항상 켜져 있습니다. KmsKeyId를 생략해 AWS 소유 키를 사용합니다.
 # - 배포 순서: 관리자가 사용자 audigo 생성 → 이 스택.
 #   캐시 이름, 사용자 ID를 바꾸면 bootstrap/infra-iam.yaml의 리소스 범위도 함께 수정합니다.
@@ -84,23 +85,6 @@ Resources:
         - {Key: ManagedBy, Value: CloudFormation}
 
   # ---------- 사용자 / 사용자 그룹 ----------
-  # 사용자 그룹에는 UserName이 default인 사용자가 반드시 있어야 합니다.
-  # AWS 기본 default 사용자는 무인증 전체 권한(on nopass)이므로 off 사용자로 대체합니다.
-  DisabledDefaultUser:
-    Type: AWS::ElastiCache::User
-    DeletionPolicy: Retain
-    UpdateReplacePolicy: Retain
-    Properties:
-      UserId: audigo-default-off
-      UserName: default
-      Engine: valkey
-      AccessString: 'off -@all'
-      AuthenticationMode:
-        Type: no-password-required
-      Tags:
-        - {Key: service, Value: audigo}
-        - {Key: ManagedBy, Value: CloudFormation}
-
   SessionUserGroup:
     Type: AWS::ElastiCache::UserGroup
     DeletionPolicy: Retain
@@ -109,7 +93,6 @@ Resources:
       UserGroupId: audigo-session-users
       Engine: valkey
       UserIds:
-        - !Ref DisabledDefaultUser
         # 관리자가 직접 만든 비밀번호 인증 사용자입니다.
         - audigo
       Tags:

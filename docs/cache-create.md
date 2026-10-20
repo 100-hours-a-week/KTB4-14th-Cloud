@@ -24,8 +24,7 @@ App(sg-0da962a4706dacd5f, sg-079261f4850dacc68) ──TLS 6379/6380, AUTH audigo
 |---|---|---|---|
 | Serverless Cache | `audigo-session` | Valkey 8, 스토리지 최대 1GB, ECPU 한도 없음, 스냅샷 보관 0 | 인프라 CD (`audigo-cache`) |
 | 보안 그룹 | `audigo-elasticache-sg` | 인바운드: 앱 SG 2개 → TCP 6379-6380 / 아웃바운드 없음 | 인프라 CD |
-| 사용자 그룹 | `audigo-session-users` | `audigo-default-off`, `audigo` | 인프라 CD |
-| 사용자 | `audigo-default-off` (UserName `default`) | `off -@all`. 무인증 접속 차단 | 인프라 CD |
+| 사용자 그룹 | `audigo-session-users` | Valkey, `audigo`만 포함. default 사용자 없음(무인증 접속 차단) | 인프라 CD |
 | 사용자 | `audigo` | 비밀번호 인증, `on ~* +@all` | 관리자 수동 |
 | Secret 키 | `audigo/v1/backend` → `REDIS_PASSWORD` | 기존 앱 공용 Secret에 키 추가 | 관리자 수동 |
 
