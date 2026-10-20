@@ -1,1 +1,8 @@
-[]
+[
+  {"ParameterKey": "ExistingVpcId", "ParameterValue": "vpc-04129874f9fd135c6"},
+  {"ParameterKey": "ExistingPrivateSubnetAId", "ParameterValue": "subnet-0ea8a5914af73dc2b"},
+  {"ParameterKey": "ExistingPrivateSubnetBId", "ParameterValue": "subnet-05b3ce96ae987cbb1"},
+  {"ParameterKey": "AppSecurityGroupId", "ParameterValue": "sg-0da962a4706dacd5f"},
+  {"ParameterKey": "SecondaryAppSecurityGroupId", "ParameterValue": "sg-079261f4850dacc68"},
+  {"ParameterKey": "MaxDataStorageGB", "ParameterValue": "1"}
+]

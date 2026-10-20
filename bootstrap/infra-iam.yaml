@@ -80,6 +80,7 @@ Resources:
                   - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-alb/*'
                   - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-db/*'
                   - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-sqs/*'
+                  - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-cache/*'
                   - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-rest-api/*'
                   - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-ai-api/*'
                   - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-websocket/*'
@@ -111,6 +112,7 @@ Resources:
                   - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-alb/*'
                   - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-db/*'
                   - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-sqs/*'
+                  - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-cache/*'
                 Condition:
                   StringEquals:
                     token.actions.githubusercontent.com:sub: !Ref PlanOidcSubject
@@ -143,6 +145,7 @@ Resources:
                   - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-alb/*'
                   - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-db/*'
                   - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-sqs/*'
+                  - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-cache/*'
                   - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-rest-api/*'
                   - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-ai-api/*'
                   - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${TargetAccountId}:stack/audigo-websocket/*'
@@ -265,7 +268,7 @@ Resources:
     UpdateReplacePolicy: Retain
     Properties:
       RoleName: AudigoCfnPlatformExecutionRole
-      Description: CloudFormation execution role for Audigo ECS common, ALB, RDS and SQS stacks.
+      Description: CloudFormation execution role for Audigo ECS common, ALB, RDS, SQS and session cache stacks.
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -481,6 +484,92 @@ Resources:
                 Condition:
                   StringEquals:
                     aws:RequestedRegion: !Ref AWS::Region
+        # audigo-cache 스택: 세션용 Serverless Valkey, IAM 인증 사용자·사용자 그룹, 캐시 전용 보안 그룹만 관리합니다.
+        # 캐시·사용자·보안 그룹 삭제, 앱 사용자(audigo) 비밀번호 변경, Secret 값 조회는 허용하지 않습니다.
+        - PolicyName: AudigoPlatformCache
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: ManageAudigoSessionCache
+                Effect: Allow
+                Action:
+                  - elasticache:CreateServerlessCache
+                  - elasticache:ModifyServerlessCache
+                  - elasticache:CreateUserGroup
+                  - elasticache:ModifyUserGroup
+                  - elasticache:AddTagsToResource
+                  - elasticache:RemoveTagsFromResource
+                  - elasticache:ListTagsForResource
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:elasticache:${AWS::Region}:${TargetAccountId}:serverlesscache:audigo-session'
+                  - !Sub 'arn:${AWS::Partition}:elasticache:${AWS::Region}:${TargetAccountId}:usergroup:audigo-session-users'
+                  - !Sub 'arn:${AWS::Partition}:elasticache:${AWS::Region}:${TargetAccountId}:user:audigo'
+                  - !Sub 'arn:${AWS::Partition}:elasticache:${AWS::Region}:${TargetAccountId}:user:audigo-default-off'
+              # 비밀번호 사용자 audigo는 관리자가 직접 관리하므로 Platform은 비활성 default 사용자만 생성·수정합니다.
+              - Sid: ManageDisabledDefaultCacheUser
+                Effect: Allow
+                Action:
+                  - elasticache:CreateUser
+                  - elasticache:ModifyUser
+                  - elasticache:AddTagsToResource
+                  - elasticache:RemoveTagsFromResource
+                  - elasticache:ListTagsForResource
+                Resource: !Sub 'arn:${AWS::Partition}:elasticache:${AWS::Region}:${TargetAccountId}:user:audigo-default-off'
+              - Sid: DescribeElastiCacheInDeploymentRegion
+                Effect: Allow
+                Action:
+                  - elasticache:DescribeServerlessCaches
+                  - elasticache:DescribeUsers
+                  - elasticache:DescribeUserGroups
+                  - ec2:DescribeSecurityGroupRules
+                  - ec2:DescribeTags
+                  - ec2:DescribeVpcEndpoints
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion: !Ref AWS::Region
+              # Serverless 캐시 생성 시 ElastiCache가 호출자 권한으로 VPC Endpoint를 만들고 지웁니다(서비스 경유 호출만 허용).
+              - Sid: ServerlessCacheManagedVpcEndpoint
+                Effect: Allow
+                Action:
+                  - ec2:CreateVpcEndpoint
+                  - ec2:DeleteVpcEndpoints
+                  - ec2:CreateTags
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion: !Ref AWS::Region
+                  Bool:
+                    aws:ViaAWSService: 'true'
+              - Sid: CreateCacheSecurityGroupInAudigoVpc
+                Effect: Allow
+                Action: ec2:CreateSecurityGroup
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${TargetAccountId}:vpc/vpc-04129874f9fd135c6'
+                  - !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${TargetAccountId}:security-group/*'
+              - Sid: ManageCacheSecurityGroupRulesInAudigoVpc
+                Effect: Allow
+                Action:
+                  - ec2:AuthorizeSecurityGroupIngress
+                  - ec2:AuthorizeSecurityGroupEgress
+                  - ec2:RevokeSecurityGroupIngress
+                  - ec2:RevokeSecurityGroupEgress
+                  - ec2:UpdateSecurityGroupRuleDescriptionsIngress
+                  - ec2:UpdateSecurityGroupRuleDescriptionsEgress
+                  - ec2:CreateTags
+                  - ec2:DeleteTags
+                Resource: !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${TargetAccountId}:security-group/*'
+                Condition:
+                  ArnEquals:
+                    ec2:Vpc: !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${TargetAccountId}:vpc/vpc-04129874f9fd135c6'
+              # 계정에 ElastiCache 서비스 연결 역할이 없을 때 최초 1회 생성됩니다.
+              - Sid: CreateElastiCacheServiceLinkedRole
+                Effect: Allow
+                Action: iam:CreateServiceLinkedRole
+                Resource: !Sub 'arn:${AWS::Partition}:iam::${TargetAccountId}:role/aws-service-role/elasticache.amazonaws.com/AWSServiceRoleForElastiCache'
+                Condition:
+                  StringEquals:
+                    iam:AWSServiceName: elasticache.amazonaws.com
 
   AudigoCfnAppExecutionRole:
     Type: AWS::IAM::Role

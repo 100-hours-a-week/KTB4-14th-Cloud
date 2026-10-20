@@ -40,8 +40,9 @@
       "name": "audigo-cache",
       "template": "cloudformation/cache.yaml",
       "parameters": "deploy/parameters/cache.json",
-      "enabled": false,
-      "allow_create": false,
+      "role_group": "platform",
+      "enabled": true,
+      "allow_create": true,
       "depends_on": [],
       "capabilities": []
     },

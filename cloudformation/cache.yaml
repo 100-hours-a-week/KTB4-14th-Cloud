@@ -1,0 +1,159 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Audigo 세션 저장용 ElastiCache Serverless(Valkey)와 전용 보안 그룹, 사용자 그룹과 비활성 default 사용자를 신규 생성합니다.
+  기존 VPC와 Private Subnet은 참조만 합니다.
+
+# 작성 기준: 2026-10-19 "세션 관리용 ElastiCache Serverless(Valkey) 구축 요청"
+# 확정 사항
+# - 용도: Spring Session 세션 저장소. 유실 시 재로그인으로 복구 가능한 데이터이므로 스냅샷을 두지 않습니다(SnapshotRetentionLimit 0).
+# - 사용량 한도: 데이터 스토리지 최대 1GB. ECPU 한도는 두지 않습니다(필요 시 CacheUsageLimits에 추가).
+# - 인증: 비밀번호 인증. 앱 사용자 audigo는 관리자가 IaC 밖에서 직접 만들고, 비밀번호는 기존 Secret audigo/v1/backend의
+#   REDIS_PASSWORD 키로 관리합니다(docs/cache-create.md).
+#   IaC가 비밀번호를 읽거나 다루지 않도록 이 스택은 사용자 ID만 고정 문자열로 참조합니다.
+#   사용자 그룹의 default 사용자는 접근 문자열 off로 비활성화해 무인증 연결을 막습니다.
+# - 전송 중/저장 시 암호화는 Serverless에서 항상 켜져 있습니다. KmsKeyId를 생략해 AWS 소유 키를 사용합니다.
+# - 배포 순서: 관리자가 사용자 audigo 생성 → 이 스택.
+#   캐시 이름, 사용자 ID를 바꾸면 bootstrap/infra-iam.yaml의 리소스 범위도 함께 수정합니다.
+
+Parameters:
+  ExistingVpcId:
+    Type: AWS::EC2::VPC::Id
+  ExistingPrivateSubnetAId:
+    Type: AWS::EC2::Subnet::Id
+  ExistingPrivateSubnetBId:
+    Type: AWS::EC2::Subnet::Id
+  AppSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: 캐시에 접속하는 Backend ECS Service의 보안 그룹입니다. 6379(쓰기·읽기), 6380(Reader) 인바운드를 허용합니다.
+  SecondaryAppSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: 캐시에 접속하는 두 번째 앱 보안 그룹입니다. 같은 포트를 허용합니다.
+  MaxDataStorageGB:
+    Type: Number
+    Default: 1
+    MinValue: 1
+    MaxValue: 5000
+    Description: 데이터 스토리지 최대 한도(GB). 초과하면 쓰기가 거부되므로 세션 TTL을 반드시 설정합니다.
+
+Rules:
+  ExistingNetworkMustMatchVpc:
+    Assertions:
+      - Assert:
+          Fn::EachMemberEquals:
+            - Fn::ValueOfAll: ['AWS::EC2::Subnet::Id', VpcId]
+            - Ref: ExistingVpcId
+        AssertDescription: 두 Private Subnet은 모두 선택한 VPC에 속해야 한다.
+      - Assert:
+          Fn::EachMemberEquals:
+            - Fn::ValueOfAll: ['AWS::EC2::SecurityGroup::Id', VpcId]
+            - Ref: ExistingVpcId
+        AssertDescription: 앱 보안 그룹 2개는 모두 선택한 VPC에 속해야 한다.
+      - Assert: !Not [!Equals [!Ref ExistingPrivateSubnetAId, !Ref ExistingPrivateSubnetBId]]
+        AssertDescription: 서로 다른 AZ의 Private Subnet 2개가 필요하다.
+
+Resources:
+  # ---------- 보안 그룹 ----------
+  # 인바운드는 앱 보안 그룹 2개에서 오는 6379-6380만 허용합니다. 캐시가 먼저 연결을 만들지 않으므로 아웃바운드 규칙은 두지 않습니다.
+  CacheSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      GroupName: audigo-elasticache-sg
+      GroupDescription: Audigo session cache - inbound from app security groups only
+      VpcId: !Ref ExistingVpcId
+      SecurityGroupIngress:
+        - Description: Valkey endpoint and reader endpoint from backend
+          IpProtocol: tcp
+          FromPort: 6379
+          ToPort: 6380
+          SourceSecurityGroupId: !Ref AppSecurityGroupId
+        - Description: Valkey endpoint and reader endpoint from secondary app
+          IpProtocol: tcp
+          FromPort: 6379
+          ToPort: 6380
+          SourceSecurityGroupId: !Ref SecondaryAppSecurityGroupId
+      # 기본 전체 허용 아웃바운드를 제거하기 위해 루프백만 허용하는 규칙으로 대체합니다.
+      SecurityGroupEgress:
+        - Description: No outbound traffic
+          IpProtocol: '-1'
+          CidrIp: 127.0.0.1/32
+      Tags:
+        - {Key: Name, Value: audigo-elasticache-sg}
+        - {Key: service, Value: audigo}
+        - {Key: ManagedBy, Value: CloudFormation}
+
+  # ---------- 사용자 / 사용자 그룹 ----------
+  # 사용자 그룹에는 UserName이 default인 사용자가 반드시 있어야 합니다.
+  # AWS 기본 default 사용자는 무인증 전체 권한(on nopass)이므로 off 사용자로 대체합니다.
+  DisabledDefaultUser:
+    Type: AWS::ElastiCache::User
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      UserId: audigo-default-off
+      UserName: default
+      Engine: valkey
+      AccessString: 'off -@all'
+      AuthenticationMode:
+        Type: no-password-required
+      Tags:
+        - {Key: service, Value: audigo}
+        - {Key: ManagedBy, Value: CloudFormation}
+
+  SessionUserGroup:
+    Type: AWS::ElastiCache::UserGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      UserGroupId: audigo-session-users
+      Engine: valkey
+      UserIds:
+        - !Ref DisabledDefaultUser
+        # 관리자가 직접 만든 비밀번호 인증 사용자입니다.
+        - audigo
+      Tags:
+        - {Key: service, Value: audigo}
+        - {Key: ManagedBy, Value: CloudFormation}
+
+  # ---------- Serverless Cache ----------
+  SessionCache:
+    Type: AWS::ElastiCache::ServerlessCache
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      ServerlessCacheName: audigo-session
+      Description: Audigo Spring Session store
+      Engine: valkey
+      MajorEngineVersion: '8'
+      CacheUsageLimits:
+        DataStorage:
+          Maximum: !Ref MaxDataStorageGB
+          Unit: GB
+      SubnetIds:
+        - !Ref ExistingPrivateSubnetAId
+        - !Ref ExistingPrivateSubnetBId
+      SecurityGroupIds:
+        - !Ref CacheSecurityGroup
+      UserGroupId: !Ref SessionUserGroup
+      # 세션은 유실 시 재로그인으로 복구하므로 자동 스냅샷을 보관하지 않습니다.
+      SnapshotRetentionLimit: 0
+      Tags:
+        - {Key: Name, Value: audigo-session}
+        - {Key: service, Value: audigo}
+        - {Key: ManagedBy, Value: CloudFormation}
+
+Outputs:
+  SessionCacheName:
+    Value: !Ref SessionCache
+  SessionCacheEndpoint:
+    Description: Backend 환경 변수 SPRING_DATA_REDIS_HOST 값입니다. TLS 필수입니다.
+    Value: !GetAtt SessionCache.Endpoint.Address
+  SessionCachePort:
+    Value: !GetAtt SessionCache.Endpoint.Port
+  SessionCacheReaderEndpoint:
+    Value: !GetAtt SessionCache.ReaderEndpoint.Address
+  SessionCacheArn:
+    Value: !GetAtt SessionCache.ARN
+  CacheSecurityGroupId:
+    Value: !Ref CacheSecurityGroup
