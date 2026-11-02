@@ -1,0 +1,32 @@
+clusterName: audigo
+region: ap-northeast-2
+vpcId: vpc-04129874f9fd135c6
+
+replicaCount: 1
+
+serviceAccount:
+  create: true
+  name: aws-load-balancer-controller
+
+nodeSelector:
+  node-role.kubernetes.io/infra: ""
+tolerations:
+  - key: node-role.kubernetes.io/infra
+    operator: Exists
+    effect: NoSchedule
+
+priorityClassName: system-cluster-critical
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    memory: 256Mi
+
+ingressClassParams:
+  create: true
+  name: audigo-alb
+  spec:
+    group:
+      name: audigo
+    scheme: internet-facing
