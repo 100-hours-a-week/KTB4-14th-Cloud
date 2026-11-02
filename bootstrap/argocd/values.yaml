@@ -1,3 +1,12 @@
+global:
+  domain: argocd.audigo.kr
+
+configs:
+  params:
+    server.insecure: "true"
+  cm:
+    url: https://argocd.audigo.kr
+
 controller:
   replicas: 1
 
@@ -9,7 +18,22 @@ server:
   service:
     type: NodePort
   ingress:
-    enabled: false
+    enabled: true
+    controller: generic
+    ingressClassName: alb
+    hostname: argocd.audigo.kr
+    path: /
+    pathType: Prefix
+    tls: false
+    annotations:
+      alb.ingress.kubernetes.io/target-type: instance
+      alb.ingress.kubernetes.io/backend-protocol: HTTP
+      alb.ingress.kubernetes.io/backend-protocol-version: HTTP1
+      alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
+      alb.ingress.kubernetes.io/ssl-redirect: "443"
+      alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:ap-northeast-2:185489190599:certificate/02b0b5fd-e083-4f37-8e27-60e91be35b18
+      alb.ingress.kubernetes.io/healthcheck-path: /healthz
+      alb.ingress.kubernetes.io/success-codes: "200"
 
 redis-ha:
   enabled: false
