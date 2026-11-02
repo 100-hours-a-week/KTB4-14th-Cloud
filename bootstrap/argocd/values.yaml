@@ -7,7 +7,7 @@ repoServer:
 server:
   replicas: 1
   service:
-    type: ClusterIP
+    type: NodePort
   ingress:
     enabled: false
 
