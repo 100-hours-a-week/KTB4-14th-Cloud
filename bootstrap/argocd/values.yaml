@@ -6,6 +6,12 @@ configs:
     server.insecure: "true"
   cm:
     url: https://argocd.audigo.kr
+    accounts.sky: login
+    accounts.amon: login
+  rbac:
+    policy.csv: |
+      g, sky, role:admin
+      g, amon, role:admin
 
 controller:
   replicas: 1
