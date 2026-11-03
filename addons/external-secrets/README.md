@@ -66,7 +66,9 @@ auth-staging 기준 예시:
 
 - 동기화 주기는 5분이다.
 - 환경변수로 주입된 값은 기존 컨테이너에서 자동 갱신되지 않는다.
-- 자동 재시작 구성 전까지는 관련 Deployment를 수동으로 재시작해야 한다.
+- 자동 재시작은 대상 annotation과 Application 설정이 적용된 Deployment에서 동작한다.
+- 적용 방법은 [Reloader 사용법](../reloader/README.md)을 참고한다.
+- 자동 재시작을 적용하지 않은 Deployment는 수동으로 재시작한다.
 - 기존 ECS용 audigo/v1/backend와 신규 객체는 자동으로 동기화되지 않는다.
 - 운영·스테이징에서 공유하는 자격 증명이 있으므로 변경 전 사용처를 확인한다.
 - DB·Redis 비밀번호는 대상 시스템의 실제 값과 일치해야 한다.
@@ -79,4 +81,5 @@ auth-staging 기준 예시:
 실제 DB·Redis·외부 API 연결 검증은 포함하지 않았다.
 
 검증 YAML은 tests/manual/external-secrets에 보관한다.
-자동 재시작과 변경 실패 시 복구 절차는 후속 작업이다.
+자동 재시작은 auth-staging의 별도 테스트 Deployment로 검증했다.
+변경 실패 시 복구 절차는 후속 작업이다.
