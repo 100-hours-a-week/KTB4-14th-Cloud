@@ -1,0 +1,129 @@
+replicaCount: 1
+
+nodeSelector:
+  role: monitoring
+
+tolerations:
+  - key: node-role.kubernetes.io/infra
+    operator: Equal
+    value: "true"
+    effect: NoSchedule
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    memory: 192Mi
+
+serviceAccount:
+  create: true
+
+# 정적 AWS 키를 넣지 않습니다.
+# 이 예시는 Pod가 노드 인스턴스 역할을 사용할 수 있다는 전제입니다.
+extraEnv:
+  - name: AWS_REGION
+    value: ap-northeast-2
+  - name: AWS_DEFAULT_REGION
+    value: ap-northeast-2
+
+extraArgs:
+  scraping-interval: "60"
+  disable-account-alias-lookup: "true"
+
+serviceMonitor:
+  enabled: true
+  namespace: monitoring
+  interval: 60s
+  timeout: 10s
+  telemetryPath: /metrics
+  labels:
+    release: kube-prometheus-stack
+
+prometheusRule:
+  enabled: false
+
+config: |
+  apiVersion: v1alpha1
+  sts-region: ap-northeast-2
+
+  static:
+    - name: audigo-ai-job-queue
+      namespace: AWS/SQS
+      regions:
+        - ap-northeast-2
+
+      dimensions:
+        - name: QueueName
+          value: Audigo-AI-Job-Queue
+
+      metrics:
+        - name: ApproximateNumberOfMessagesVisible
+          statistics: [Maximum]
+          period: 60
+          length: 300
+          delay: 60
+
+        - name: ApproximateNumberOfMessagesNotVisible
+          statistics: [Maximum]
+          period: 60
+          length: 300
+          delay: 60
+
+        - name: ApproximateAgeOfOldestMessage
+          statistics: [Maximum]
+          period: 60
+          length: 300
+          delay: 60
+
+        - name: NumberOfMessagesSent
+          statistics: [Sum]
+          period: 60
+          length: 300
+          delay: 60
+
+        - name: NumberOfMessagesDeleted
+          statistics: [Sum]
+          period: 60
+          length: 300
+          delay: 60
+
+    - name: audigo-ai-result-queue
+      namespace: AWS/SQS
+      regions:
+        - ap-northeast-2
+
+      dimensions:
+        - name: QueueName
+          value: Audigo-AI-Result-Queue
+
+      metrics:
+        - name: ApproximateNumberOfMessagesVisible
+          statistics: [Maximum]
+          period: 60
+          length: 300
+          delay: 60
+
+        - name: ApproximateNumberOfMessagesNotVisible
+          statistics: [Maximum]
+          period: 60
+          length: 300
+          delay: 60
+
+        - name: ApproximateAgeOfOldestMessage
+          statistics: [Maximum]
+          period: 60
+          length: 300
+          delay: 60
+
+        - name: NumberOfMessagesSent
+          statistics: [Sum]
+          period: 60
+          length: 300
+          delay: 60
+
+        - name: NumberOfMessagesDeleted
+          statistics: [Sum]
+          period: 60
+          length: 300
+          delay: 60

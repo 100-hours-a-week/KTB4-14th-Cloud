@@ -1,0 +1,181 @@
+alertmanager:
+  enabled: false
+
+grafana:
+  enabled: true
+
+  nodeSelector:
+    role: monitoring
+
+  tolerations:
+    - key: node-role.kubernetes.io/infra
+      operator: Equal
+      value: "true"
+      effect: NoSchedule
+
+  admin:
+    existingSecret: grafana-admin
+    userKey: admin-user
+    passwordKey: admin-password
+
+  persistence:
+    enabled: false
+
+  ingress:
+    enabled: false
+
+  service:
+    type: ClusterIP
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      memory: 384Mi
+
+  sidecar:
+    dashboards:
+      enabled: true
+    datasources:
+      enabled: true
+
+  additionalDataSources:
+    - name: Loki
+      uid: loki
+      type: loki
+      access: proxy
+      url: http://loki.monitoring.svc.cluster.local:3100
+      isDefault: false
+      editable: false
+
+prometheus:
+  enabled: true
+
+  prometheusSpec:
+    replicas: 1
+    retention: 35d
+
+    nodeSelector:
+      role: monitoring
+
+    tolerations:
+      - key: node-role.kubernetes.io/infra
+        operator: Equal
+        value: "true"
+        effect: NoSchedule
+
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 65534
+      runAsGroup: 65534
+      fsGroup: 65534
+
+    resources:
+      requests:
+        cpu: 300m
+        memory: 512Mi
+      limits:
+        memory: 1Gi
+
+    # PVC는 생성하지 않습니다.
+    storageSpec: {}
+
+    volumes:
+      - name: prometheus-host-storage
+        hostPath:
+          path: /monitoring/prometheus
+          type: Directory
+
+    # Operator가 생성하는 prometheus 컨테이너의
+    # /prometheus 마운트를 hostPath로 재정의합니다.
+    containers:
+      - name: prometheus
+        volumeMounts:
+          - name: prometheus-host-storage
+            mountPath: /prometheus
+            subPath: ""
+
+    # 추가 ServiceMonitor/PodMonitor에는 아래 라벨을 지정합니다.
+    serviceMonitorSelector:
+      matchLabels:
+        release: kube-prometheus-stack
+
+    podMonitorSelector:
+      matchLabels:
+        release: kube-prometheus-stack
+
+prometheusOperator:
+  enabled: true
+
+  nodeSelector:
+    role: monitoring
+
+  tolerations:
+    - key: node-role.kubernetes.io/infra
+      operator: Equal
+      value: "true"
+      effect: NoSchedule
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      memory: 256Mi
+
+  prometheusConfigReloader:
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        memory: 64Mi
+
+  admissionWebhooks:
+    patch:
+      nodeSelector:
+        role: monitoring
+
+      tolerations:
+        - key: node-role.kubernetes.io/infra
+          operator: Equal
+          value: "true"
+          effect: NoSchedule
+
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          memory: 64Mi
+
+kube-state-metrics:
+  nodeSelector:
+    role: monitoring
+
+  tolerations:
+    - key: node-role.kubernetes.io/infra
+      operator: Equal
+      value: "true"
+      effect: NoSchedule
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      memory: 128Mi
+
+prometheus-node-exporter:
+  # infra·control-plane 등 NoSchedule taint가 있는 노드도 수집합니다.
+  tolerations:
+    - operator: Exists
+      effect: NoSchedule
+
+  resources:
+    requests:
+      cpu: 20m
+      memory: 32Mi
+    limits:
+      memory: 96Mi

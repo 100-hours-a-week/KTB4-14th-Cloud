@@ -1,0 +1,131 @@
+controller:
+  type: daemonset
+
+  nodeSelector:
+    kubernetes.io/os: linux
+
+  tolerations:
+    - operator: Exists
+      effect: NoSchedule
+
+  volumes:
+    extra:
+      - name: alloy-state
+        hostPath:
+          path: /var/lib/alloy
+          type: DirectoryOrCreate
+
+alloy:
+  enableReporting: false
+
+  storagePath: /var/lib/alloy
+
+  extraEnv:
+    - name: NODE_NAME
+      valueFrom:
+        fieldRef:
+          fieldPath: spec.nodeName
+
+  mounts:
+    varlog: true
+    extra:
+      - name: alloy-state
+        mountPath: /var/lib/alloy
+
+  securityContext:
+    runAsUser: 0
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 256Mi
+
+  configMap:
+    content: |
+      logging {
+        level  = "info"
+        format = "logfmt"
+      }
+
+      discovery.kubernetes "pods" {
+        role = "pod"
+
+        selectors {
+          role  = "pod"
+          field = "spec.nodeName=" + sys.env("NODE_NAME")
+        }
+      }
+
+      discovery.relabel "pod_logs" {
+        targets = discovery.kubernetes.pods.targets
+
+        // 수집 namespace입니다.
+        // 여러 개라면 "app|다른namespace" 형태로 수정합니다.
+        rule {
+          source_labels = ["__meta_kubernetes_namespace"]
+          regex         = "app"
+          action        = "keep"
+        }
+
+        rule {
+          source_labels = ["__meta_kubernetes_namespace"]
+          target_label  = "namespace"
+        }
+
+        rule {
+          source_labels = ["__meta_kubernetes_pod_name"]
+          target_label  = "pod"
+        }
+
+        rule {
+          source_labels = ["__meta_kubernetes_pod_container_name"]
+          target_label  = "container"
+        }
+
+        rule {
+          source_labels = ["__meta_kubernetes_pod_node_name"]
+          target_label  = "node"
+        }
+
+        rule {
+          source_labels = [
+            "__meta_kubernetes_pod_uid",
+            "__meta_kubernetes_pod_container_name",
+          ]
+          separator    = "/"
+          target_label = "__path__"
+          replacement  = "/var/log/pods/*$1/*.log"
+        }
+      }
+
+      local.file_match "pod_logs" {
+        path_targets = discovery.relabel.pod_logs.output
+      }
+
+      loki.source.file "pod_logs" {
+        targets    = local.file_match.pod_logs.targets
+        forward_to = [loki.process.pod_logs.receiver]
+      }
+
+      loki.process "pod_logs" {
+        stage.cri {}
+
+        forward_to = [loki.write.default.receiver]
+      }
+
+      loki.write "default" {
+        endpoint {
+          url = "http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push"
+        }
+      }
+
+serviceMonitor:
+  enabled: true
+  additionalLabels:
+    release: kube-prometheus-stack
