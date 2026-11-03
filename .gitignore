@@ -17,3 +17,6 @@
 __pycache__/
 *.py[cod]
 .venv/
+
+# 로컬에 다운로드한 Cilium 차트
+/bootstrap/cilium/charts/
