@@ -1,0 +1,266 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: auth-staging
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+
+---
+apiVersion: external-secrets.io/v1
+kind: SecretStore
+metadata:
+  name: aws-backend
+  namespace: auth-staging
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  provider:
+    aws:
+      service: SecretsManager
+      region: ap-northeast-2
+      role: arn:aws:iam::185489190599:role/audigo-eso-backend-staging
+
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: backend-secrets
+  namespace: auth-staging
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  refreshPolicy: Periodic
+  refreshInterval: 5m
+  secretStoreRef:
+    name: aws-backend
+    kind: SecretStore
+  target:
+    name: backend-secrets
+    creationPolicy: Owner
+    deletionPolicy: Retain
+  data:
+    - secretKey: AUDIGO_API_TOKEN
+      remoteRef:
+        key: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/staging-b18gCL
+        property: AUDIGO_API_TOKEN
+    - secretKey: AUDIGO_JWT_SECRET
+      remoteRef:
+        key: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/staging-b18gCL
+        property: AUDIGO_JWT_SECRET
+    - secretKey: DB_PASSWORD
+      remoteRef:
+        key: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/staging-b18gCL
+        property: DB_PASSWORD
+    - secretKey: KAKAO_REST_API_KEY
+      remoteRef:
+        key: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/staging-b18gCL
+        property: KAKAO_REST_API_KEY
+    - secretKey: AUDIGO_REDIS_PASSWORD
+      remoteRef:
+        key: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/staging-b18gCL
+        property: AUDIGO_REDIS_PASSWORD
+    - secretKey: TAGO_SERVICE_KEY
+      remoteRef:
+        key: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/staging-b18gCL
+        property: TAGO_SERVICE_KEY
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: chat-staging
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+
+---
+apiVersion: external-secrets.io/v1
+kind: SecretStore
+metadata:
+  name: aws-backend
+  namespace: chat-staging
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  provider:
+    aws:
+      service: SecretsManager
+      region: ap-northeast-2
+      role: arn:aws:iam::185489190599:role/audigo-eso-backend-staging
+
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: backend-secrets
+  namespace: chat-staging
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  refreshPolicy: Periodic
+  refreshInterval: 5m
+  secretStoreRef:
+    name: aws-backend
+    kind: SecretStore
+  target:
+    name: backend-secrets
+    creationPolicy: Owner
+    deletionPolicy: Retain
+  data:
+    - secretKey: AUDIGO_API_TOKEN
+      remoteRef:
+        key: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/staging-b18gCL
+        property: AUDIGO_API_TOKEN
+    - secretKey: AUDIGO_JWT_SECRET
+      remoteRef:
+        key: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/staging-b18gCL
+        property: AUDIGO_JWT_SECRET
+    - secretKey: DB_PASSWORD
+      remoteRef:
+        key: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/staging-b18gCL
+        property: DB_PASSWORD
+    - secretKey: KAKAO_REST_API_KEY
+      remoteRef:
+        key: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/staging-b18gCL
+        property: KAKAO_REST_API_KEY
+    - secretKey: AUDIGO_REDIS_PASSWORD
+      remoteRef:
+        key: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/staging-b18gCL
+        property: AUDIGO_REDIS_PASSWORD
+    - secretKey: TAGO_SERVICE_KEY
+      remoteRef:
+        key: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/staging-b18gCL
+        property: TAGO_SERVICE_KEY
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: travel-staging
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+
+---
+apiVersion: external-secrets.io/v1
+kind: SecretStore
+metadata:
+  name: aws-backend
+  namespace: travel-staging
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  provider:
+    aws:
+      service: SecretsManager
+      region: ap-northeast-2
+      role: arn:aws:iam::185489190599:role/audigo-eso-backend-staging
+
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: backend-secrets
+  namespace: travel-staging
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  refreshPolicy: Periodic
+  refreshInterval: 5m
+  secretStoreRef:
+    name: aws-backend
+    kind: SecretStore
+  target:
+    name: backend-secrets
+    creationPolicy: Owner
+    deletionPolicy: Retain
+  data:
+    - secretKey: AUDIGO_API_TOKEN
+      remoteRef:
+        key: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/staging-b18gCL
+        property: AUDIGO_API_TOKEN
+    - secretKey: AUDIGO_JWT_SECRET
+      remoteRef:
+        key: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/staging-b18gCL
+        property: AUDIGO_JWT_SECRET
+    - secretKey: DB_PASSWORD
+      remoteRef:
+        key: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/staging-b18gCL
+        property: DB_PASSWORD
+    - secretKey: KAKAO_REST_API_KEY
+      remoteRef:
+        key: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/staging-b18gCL
+        property: KAKAO_REST_API_KEY
+    - secretKey: AUDIGO_REDIS_PASSWORD
+      remoteRef:
+        key: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/staging-b18gCL
+        property: AUDIGO_REDIS_PASSWORD
+    - secretKey: TAGO_SERVICE_KEY
+      remoteRef:
+        key: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/staging-b18gCL
+        property: TAGO_SERVICE_KEY
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: general-staging
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+
+---
+apiVersion: external-secrets.io/v1
+kind: SecretStore
+metadata:
+  name: aws-backend
+  namespace: general-staging
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  provider:
+    aws:
+      service: SecretsManager
+      region: ap-northeast-2
+      role: arn:aws:iam::185489190599:role/audigo-eso-backend-staging
+
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: backend-secrets
+  namespace: general-staging
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  refreshPolicy: Periodic
+  refreshInterval: 5m
+  secretStoreRef:
+    name: aws-backend
+    kind: SecretStore
+  target:
+    name: backend-secrets
+    creationPolicy: Owner
+    deletionPolicy: Retain
+  data:
+    - secretKey: AUDIGO_API_TOKEN
+      remoteRef:
+        key: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/staging-b18gCL
+        property: AUDIGO_API_TOKEN
+    - secretKey: AUDIGO_JWT_SECRET
+      remoteRef:
+        key: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/staging-b18gCL
+        property: AUDIGO_JWT_SECRET
+    - secretKey: DB_PASSWORD
+      remoteRef:
+        key: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/staging-b18gCL
+        property: DB_PASSWORD
+    - secretKey: KAKAO_REST_API_KEY
+      remoteRef:
+        key: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/staging-b18gCL
+        property: KAKAO_REST_API_KEY
+    - secretKey: AUDIGO_REDIS_PASSWORD
+      remoteRef:
+        key: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/staging-b18gCL
+        property: AUDIGO_REDIS_PASSWORD
+    - secretKey: TAGO_SERVICE_KEY
+      remoteRef:
+        key: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/staging-b18gCL
+        property: TAGO_SERVICE_KEY
