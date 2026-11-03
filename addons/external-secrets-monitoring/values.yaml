@@ -1,0 +1,54 @@
+replicaCount: 1
+
+# 기존 ESO 설치가 관리
+installCRDs: false
+
+webhook:
+  create: false
+
+certController:
+  create: false
+
+# monitoring namespace만 처리
+scopedNamespace: monitoring
+scopedRBAC: true
+
+# 기존 backend controller와 처리 대상을 구분
+controllerClass: monitoring
+
+processSecretStore: true
+processClusterStore: false
+processClusterExternalSecret: false
+processClusterPushSecret: false
+processClusterGenerator: false
+processPushSecret: false
+
+serviceAccount:
+  create: true
+  name: external-secrets-monitoring
+
+rbac:
+  create: true
+  serviceAccountTokenCreate: false
+  aggregateToView: false
+  aggregateToEdit: false
+  aggregateToAdmin: false
+  servicebindings:
+    create: false
+
+# aws-lb-controller, external-secrets-controller와 동일하게 infra 노드에 배포(고정)
+nodeSelector:
+  node-role.kubernetes.io/infra: ""
+
+tolerations:
+  - key: node-role.kubernetes.io/infra
+    operator: Equal
+    value: "true"
+    effect: NoSchedule
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    memory: 256Mi

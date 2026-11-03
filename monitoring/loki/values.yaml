@@ -1,0 +1,108 @@
+deploymentMode: Monolithic
+
+loki:
+  auth_enabled: false
+
+  commonConfig:
+    path_prefix: /var/loki
+    replication_factor: 1
+
+  schemaConfig:
+    configs:
+      - from: "2026-11-01"
+        store: tsdb
+        object_store: s3
+        schema: v13
+        index:
+          prefix: loki_index_
+          period: 24h
+
+  storage:
+    type: s3
+    use_thanos_objstore: false
+
+    bucketNames:
+      chunks: audigo-loki-logs
+      ruler: audigo-loki-logs
+      admin: audigo-loki-logs
+
+    s3:
+      region: ap-northeast-2
+
+  storageConfig:
+    tsdb_shipper:
+      active_index_directory: /var/loki/tsdb-index
+      cache_location: /var/loki/tsdb-cache
+
+  ingester:
+    wal:
+      enabled: true
+      dir: /var/loki/wal
+
+  compactor:
+    working_directory: /var/loki/compactor
+    retention_enabled: true
+    delete_request_store: s3
+
+  limits_config:
+    retention_period: 168h
+
+singleBinary:
+  replicas: 1
+
+  nodeSelector:
+    role: monitoring
+
+  tolerations:
+    - key: node-role.kubernetes.io/infra
+      operator: Equal
+      value: "true"
+      effect: NoSchedule
+
+  resources:
+    requests:
+      cpu: 200m
+      memory: 384Mi
+    limits:
+      memory: 768Mi
+
+  persistence:
+    enabled: false
+
+    # 기본 emptyDir를 hostPath로 대체합니다.
+    dataVolumeParameters:
+      hostPath:
+        path: /monitoring/loki
+        type: Directory
+
+# 분리 배포 구성은 사용하지 않습니다.
+read:
+  replicas: 0
+
+write:
+  replicas: 0
+
+backend:
+  replicas: 0
+
+# Grafana와 후속 Alloy는 Loki Service에 직접 연결합니다.
+gateway:
+  enabled: false
+
+chunksCache:
+  enabled: false
+
+resultsCache:
+  enabled: false
+
+lokiCanary:
+  enabled: false
+
+test:
+  enabled: false
+
+minio:
+  enabled: false
+
+ruler:
+  enabled: false

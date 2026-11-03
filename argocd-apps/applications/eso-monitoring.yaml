@@ -1,0 +1,54 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: external-secrets-monitoring
+  namespace: argocd
+spec:
+  project: default
+
+  sources:
+    - repoURL: https://charts.external-secrets.io
+      chart: external-secrets
+      targetRevision: "2.14.0"
+      helm:
+        releaseName: external-secrets-monitoring
+        valueFiles:
+          - $values/addons/external-secrets-monitoring/values.yaml
+
+    - repoURL: https://github.com/100-hours-a-week/KTB4-14th-Cloud.git
+      targetRevision: main
+      ref: values
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: eso-monitoring
+  namespace: argocd
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/100-hours-a-week/KTB4-14th-Cloud.git
+    targetRevision: main
+    path: addons/external-secrets-monitoring/resources
+    directory:
+      recurse: true
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
