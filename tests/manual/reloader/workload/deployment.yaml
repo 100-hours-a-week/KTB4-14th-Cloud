@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reloader-check
+  namespace: auth-staging
+  annotations:
+    secret.reloader.stakater.com/reload: reloader-check
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: reloader-check
+  template:
+    metadata:
+      labels:
+        app: reloader-check
+      annotations: {}
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 5
+      containers:
+        - name: check
+          image: busybox:1.37.0
+          command:
+            - sh
+            - -ec
+            - 'test -n "$RELOAD_TEST_VALUE"; exec sleep 86400'
+          env:
+            - name: RELOAD_TEST_VALUE
+              valueFrom:
+                secretKeyRef:
+                  name: reloader-check
+                  key: value
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -ec
+                - 'test -n "$RELOAD_TEST_VALUE"'
+            periodSeconds: 2
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              memory: 32Mi
