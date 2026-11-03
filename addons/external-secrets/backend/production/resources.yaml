@@ -1,0 +1,266 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: auth-prod
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+
+---
+apiVersion: external-secrets.io/v1
+kind: SecretStore
+metadata:
+  name: aws-backend
+  namespace: auth-prod
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  provider:
+    aws:
+      service: SecretsManager
+      region: ap-northeast-2
+      role: arn:aws:iam::185489190599:role/audigo-eso-backend-production
+
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: backend-secrets
+  namespace: auth-prod
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  refreshPolicy: Periodic
+  refreshInterval: 5m
+  secretStoreRef:
+    name: aws-backend
+    kind: SecretStore
+  target:
+    name: backend-secrets
+    creationPolicy: Owner
+    deletionPolicy: Retain
+  data:
+    - secretKey: AUDIGO_API_TOKEN
+      remoteRef:
+        key: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/production-yykCZ2
+        property: AUDIGO_API_TOKEN
+    - secretKey: AUDIGO_JWT_SECRET
+      remoteRef:
+        key: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/production-yykCZ2
+        property: AUDIGO_JWT_SECRET
+    - secretKey: DB_PASSWORD
+      remoteRef:
+        key: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/production-yykCZ2
+        property: DB_PASSWORD
+    - secretKey: KAKAO_REST_API_KEY
+      remoteRef:
+        key: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/production-yykCZ2
+        property: KAKAO_REST_API_KEY
+    - secretKey: SPRING_DATA_REDIS_PASSWORD
+      remoteRef:
+        key: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/production-yykCZ2
+        property: SPRING_DATA_REDIS_PASSWORD
+    - secretKey: TAGO_SERVICE_KEY
+      remoteRef:
+        key: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/production-yykCZ2
+        property: TAGO_SERVICE_KEY
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: chat-prod
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+
+---
+apiVersion: external-secrets.io/v1
+kind: SecretStore
+metadata:
+  name: aws-backend
+  namespace: chat-prod
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  provider:
+    aws:
+      service: SecretsManager
+      region: ap-northeast-2
+      role: arn:aws:iam::185489190599:role/audigo-eso-backend-production
+
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: backend-secrets
+  namespace: chat-prod
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  refreshPolicy: Periodic
+  refreshInterval: 5m
+  secretStoreRef:
+    name: aws-backend
+    kind: SecretStore
+  target:
+    name: backend-secrets
+    creationPolicy: Owner
+    deletionPolicy: Retain
+  data:
+    - secretKey: AUDIGO_API_TOKEN
+      remoteRef:
+        key: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/production-yykCZ2
+        property: AUDIGO_API_TOKEN
+    - secretKey: AUDIGO_JWT_SECRET
+      remoteRef:
+        key: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/production-yykCZ2
+        property: AUDIGO_JWT_SECRET
+    - secretKey: DB_PASSWORD
+      remoteRef:
+        key: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/production-yykCZ2
+        property: DB_PASSWORD
+    - secretKey: KAKAO_REST_API_KEY
+      remoteRef:
+        key: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/production-yykCZ2
+        property: KAKAO_REST_API_KEY
+    - secretKey: SPRING_DATA_REDIS_PASSWORD
+      remoteRef:
+        key: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/production-yykCZ2
+        property: SPRING_DATA_REDIS_PASSWORD
+    - secretKey: TAGO_SERVICE_KEY
+      remoteRef:
+        key: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/production-yykCZ2
+        property: TAGO_SERVICE_KEY
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: travel-prod
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+
+---
+apiVersion: external-secrets.io/v1
+kind: SecretStore
+metadata:
+  name: aws-backend
+  namespace: travel-prod
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  provider:
+    aws:
+      service: SecretsManager
+      region: ap-northeast-2
+      role: arn:aws:iam::185489190599:role/audigo-eso-backend-production
+
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: backend-secrets
+  namespace: travel-prod
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  refreshPolicy: Periodic
+  refreshInterval: 5m
+  secretStoreRef:
+    name: aws-backend
+    kind: SecretStore
+  target:
+    name: backend-secrets
+    creationPolicy: Owner
+    deletionPolicy: Retain
+  data:
+    - secretKey: AUDIGO_API_TOKEN
+      remoteRef:
+        key: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/production-yykCZ2
+        property: AUDIGO_API_TOKEN
+    - secretKey: AUDIGO_JWT_SECRET
+      remoteRef:
+        key: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/production-yykCZ2
+        property: AUDIGO_JWT_SECRET
+    - secretKey: DB_PASSWORD
+      remoteRef:
+        key: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/production-yykCZ2
+        property: DB_PASSWORD
+    - secretKey: KAKAO_REST_API_KEY
+      remoteRef:
+        key: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/production-yykCZ2
+        property: KAKAO_REST_API_KEY
+    - secretKey: SPRING_DATA_REDIS_PASSWORD
+      remoteRef:
+        key: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/production-yykCZ2
+        property: SPRING_DATA_REDIS_PASSWORD
+    - secretKey: TAGO_SERVICE_KEY
+      remoteRef:
+        key: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/production-yykCZ2
+        property: TAGO_SERVICE_KEY
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: general-prod
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+
+---
+apiVersion: external-secrets.io/v1
+kind: SecretStore
+metadata:
+  name: aws-backend
+  namespace: general-prod
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  provider:
+    aws:
+      service: SecretsManager
+      region: ap-northeast-2
+      role: arn:aws:iam::185489190599:role/audigo-eso-backend-production
+
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: backend-secrets
+  namespace: general-prod
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  refreshPolicy: Periodic
+  refreshInterval: 5m
+  secretStoreRef:
+    name: aws-backend
+    kind: SecretStore
+  target:
+    name: backend-secrets
+    creationPolicy: Owner
+    deletionPolicy: Retain
+  data:
+    - secretKey: AUDIGO_API_TOKEN
+      remoteRef:
+        key: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/production-yykCZ2
+        property: AUDIGO_API_TOKEN
+    - secretKey: AUDIGO_JWT_SECRET
+      remoteRef:
+        key: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/production-yykCZ2
+        property: AUDIGO_JWT_SECRET
+    - secretKey: DB_PASSWORD
+      remoteRef:
+        key: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/production-yykCZ2
+        property: DB_PASSWORD
+    - secretKey: KAKAO_REST_API_KEY
+      remoteRef:
+        key: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/production-yykCZ2
+        property: KAKAO_REST_API_KEY
+    - secretKey: SPRING_DATA_REDIS_PASSWORD
+      remoteRef:
+        key: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/production-yykCZ2
+        property: SPRING_DATA_REDIS_PASSWORD
+    - secretKey: TAGO_SERVICE_KEY
+      remoteRef:
+        key: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/production-yykCZ2
+        property: TAGO_SERVICE_KEY
