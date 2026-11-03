@@ -1,0 +1,29 @@
+fullnameOverride: reloader
+
+reloader:
+  autoReloadAll: false
+  reloadStrategy: annotations
+
+  ignoreConfigMaps: true
+  ignoreJobs: true
+  ignoreCronJobs: true
+
+  watchGlobally: false
+  namespaces:
+    - auth-prod
+    - auth-staging
+    - chat-prod
+    - chat-staging
+    - travel-prod
+    - travel-staging
+    - general-prod
+    - general-staging
+
+  deployment:
+    replicas: 1
+    resources:
+      requests:
+        cpu: 25m
+        memory: 64Mi
+      limits:
+        memory: 256Mi
