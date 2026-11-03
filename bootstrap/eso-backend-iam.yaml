@@ -1,0 +1,61 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Read-only IAM roles for Audigo backend secrets via ESO.
+
+Resources:
+  ProductionRole:
+    Type: AWS::IAM::Role
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      RoleName: audigo-eso-backend-production
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: arn:aws:iam::185489190599:role/audigo-worker-role
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: read-backend-production-secret
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                  - secretsmanager:DescribeSecret
+                  - secretsmanager:GetResourcePolicy
+                  - secretsmanager:ListSecretVersionIds
+                Resource: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/production-yykCZ2
+
+  StagingRole:
+    Type: AWS::IAM::Role
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      RoleName: audigo-eso-backend-staging
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: arn:aws:iam::185489190599:role/audigo-worker-role
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: read-backend-staging-secret
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                  - secretsmanager:DescribeSecret
+                  - secretsmanager:GetResourcePolicy
+                  - secretsmanager:ListSecretVersionIds
+                Resource: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/backend/staging-b18gCL
+
+Outputs:
+  ProductionRoleArn:
+    Value: !GetAtt ProductionRole.Arn
+  StagingRoleArn:
+    Value: !GetAtt StagingRole.Arn
