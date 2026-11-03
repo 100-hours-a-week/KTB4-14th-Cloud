@@ -1,0 +1,150 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: backend-secret-injection-check
+  namespace: auth-prod
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 120
+  template:
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      containers:
+        - name: check
+          image: busybox:1.37.0
+          command: ["sh", "-ec"]
+          args:
+            - |
+              for key in AUDIGO_API_TOKEN AUDIGO_JWT_SECRET DB_PASSWORD KAKAO_REST_API_KEY SPRING_DATA_REDIS_PASSWORD TAGO_SERVICE_KEY; do
+                if [ -z "$(printenv "$key")" ]; then
+                  echo "MISSING_KEY:$key"
+                  exit 1
+                fi
+              done
+              echo "SECRET_INJECTION_OK"
+          envFrom:
+            - secretRef:
+                name: backend-secrets
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              memory: 32Mi
+
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: backend-secret-injection-check
+  namespace: chat-prod
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 120
+  template:
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      containers:
+        - name: check
+          image: busybox:1.37.0
+          command: ["sh", "-ec"]
+          args:
+            - |
+              for key in AUDIGO_API_TOKEN AUDIGO_JWT_SECRET DB_PASSWORD KAKAO_REST_API_KEY SPRING_DATA_REDIS_PASSWORD TAGO_SERVICE_KEY; do
+                if [ -z "$(printenv "$key")" ]; then
+                  echo "MISSING_KEY:$key"
+                  exit 1
+                fi
+              done
+              echo "SECRET_INJECTION_OK"
+          envFrom:
+            - secretRef:
+                name: backend-secrets
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              memory: 32Mi
+
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: backend-secret-injection-check
+  namespace: travel-prod
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 120
+  template:
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      containers:
+        - name: check
+          image: busybox:1.37.0
+          command: ["sh", "-ec"]
+          args:
+            - |
+              for key in AUDIGO_API_TOKEN AUDIGO_JWT_SECRET DB_PASSWORD KAKAO_REST_API_KEY SPRING_DATA_REDIS_PASSWORD TAGO_SERVICE_KEY; do
+                if [ -z "$(printenv "$key")" ]; then
+                  echo "MISSING_KEY:$key"
+                  exit 1
+                fi
+              done
+              echo "SECRET_INJECTION_OK"
+          envFrom:
+            - secretRef:
+                name: backend-secrets
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              memory: 32Mi
+
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: backend-secret-injection-check
+  namespace: general-prod
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 120
+  template:
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      containers:
+        - name: check
+          image: busybox:1.37.0
+          command: ["sh", "-ec"]
+          args:
+            - |
+              for key in AUDIGO_API_TOKEN AUDIGO_JWT_SECRET DB_PASSWORD KAKAO_REST_API_KEY SPRING_DATA_REDIS_PASSWORD TAGO_SERVICE_KEY; do
+                if [ -z "$(printenv "$key")" ]; then
+                  echo "MISSING_KEY:$key"
+                  exit 1
+                fi
+              done
+              echo "SECRET_INJECTION_OK"
+          envFrom:
+            - secretRef:
+                name: backend-secrets
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              memory: 32Mi
