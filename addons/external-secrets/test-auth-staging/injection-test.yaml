@@ -1,0 +1,32 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: eso-secret-injection-check
+  namespace: app
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 120
+  template:
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      containers:
+        - name: check
+          image: busybox:1.37.0
+          command: ["sh", "-ec"]
+          args:
+            - |
+              test -n "$SECRET_TEST_PAYLOAD"
+              echo "SECRET_INJECTION_OK"
+          env:
+            - name: SECRET_TEST_PAYLOAD
+              valueFrom:
+                secretKeyRef:
+                  name: auth-staging-test
+                  key: payload
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              memory: 32Mi
