@@ -101,8 +101,5 @@ lokiCanary:
 test:
   enabled: false
 
-minio:
-  enabled: false
-
 ruler:
   enabled: false
