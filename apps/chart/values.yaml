@@ -22,6 +22,10 @@ strategy:
 env: [] # 일반 환경변수 (Git에 남아도 되는 값) / - 로 구분해서 name, value 입력
 envFrom: [] # 추가로 주입할 ConfigMap/Secret. ESO Secret은 자동으로 붙음 /- 로 구분해서 configMapRef 또는 secretRef 입력
 
+reloader:
+  # Deployment가 변경을 감시할 기존 Secret 이름
+  existingSecretNames: []
+
 configMap:
   enabled: false
   data: {}

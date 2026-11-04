@@ -5,16 +5,22 @@
 {{- fail "lifecycle.preStopSleepSeconds는 terminationGracePeriodSeconds보다 작아야 합니다" }}
 {{- end }}
 
+{{- $secretNames := list }}
+{{- if .Values.externalSecret.enabled }}
+{{- $secretNames = append $secretNames (include "app-chart.secretName" .) }}
+{{- end }}
+{{- $secretNames = concat $secretNames .Values.reloader.existingSecretNames | uniq }}
+
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ .Release.Name }}
   labels:
     {{- include "app-chart.labels" . | nindent 4 }}
-  {{- if .Values.externalSecret.enabled }}
+  {{- if $secretNames }}
   annotations:
-    # ESO가 Secret을 갱신하면 Reloader가 Pod를 다시 띄워 새 값을 반영합니다.
-    secret.reloader.stakater.com/reload: {{ include "app-chart.secretName" . }}
+    # 감시 대상 Secret이 변경되면 Reloader가 Pod를 다시 띄워 새 값을 반영합니다.
+    secret.reloader.stakater.com/reload: {{ $secretNames | join "," | quote }}
   {{- end }}
 spec:
   {{- if not .Values.autoscaling.enabled }}
