@@ -38,6 +38,10 @@ spec:
       {{- else if and $automount (ne (toString $automount) "") }}
       {{- fail "automountServiceAccountToken은 true, false 또는 빈 값으로 지정해 주세요" }}
       {{- end }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       {{- with .Values.terminationGracePeriodSeconds }}
       terminationGracePeriodSeconds: {{ . }}
       {{- end }}
