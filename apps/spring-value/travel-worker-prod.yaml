@@ -57,6 +57,10 @@ configMap:
 externalSecret:
   enabled: false
 
+reloader:
+  existingSecretNames:
+    - backend-secrets
+
 # 같은 Namespace의 기존 Secret 연결
 envFrom:
   - secretRef:

@@ -16,7 +16,15 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: auth-staging
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      name: auth-api
+      namespace: auth-staging
+      jsonPointers:
+        - /spec/template/metadata/annotations/reloader.stakater.com~1last-reloaded-from
   # 최초 배포는 수동 Sync합니다.
   syncPolicy:
     syncOptions:
       - ServerSideApply=true
+      - RespectIgnoreDifferences=true
