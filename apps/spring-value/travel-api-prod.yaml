@@ -1,0 +1,82 @@
+# apps/spring-value/travel-api-prod.yaml
+
+labels:
+  service: travel
+  env: prod
+  component: api
+
+replicaCount: 1
+
+image:
+  repository: mingkiboo/audigo-backend
+  tag: sha-740a86e2d9f3df4ad0ced6947810884b7c763631
+  digest: sha256:21f6d85be717fd6d2abb68da8ca2207f0c185fa4937c444fe710c9d9821b404f
+
+containerPort: 8080
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 1536Mi
+  limits:
+    memory: 2Gi
+
+configMap:
+  enabled: true
+  data:
+    AUDIGO_ENVIRONMENT: "prod"
+
+    # 운영 MySQL
+    SPRING_DATASOURCE_URL: "jdbc:mysql://audigo-prd-db.c52se0u48luz.ap-northeast-2.rds.amazonaws.com:3306/audigo"
+    DB_USERNAME: "audigo_app"
+
+    # 기존 테이블 검증만 수행
+    JPA_DDL_AUTO: "validate"
+    SPRING_SQL_INIT_MODE: "never"
+
+    # DB 커넥션 풀
+    SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "6"
+    SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: "2"
+    SPRING_DATASOURCE_HIKARI_CONNECTION_TIMEOUT: "3000"
+
+    # 공유 Redis
+    SPRING_DATA_REDIS_HOST: "audigo-session-aofpfb.serverless.apn2.cache.amazonaws.com"
+    SPRING_DATA_REDIS_PORT: "6379"
+    SPRING_DATA_REDIS_USERNAME: "audigo"
+    SPRING_DATA_REDIS_SSL_ENABLED: "true"
+
+    # 운영 큐
+    AUDIGO_SQS_ENABLED: "true"
+    AWS_REGION: "ap-northeast-2"
+    AUDIGO_AI_JOB_QUEUE_URL: "https://sqs.ap-northeast-2.amazonaws.com/185489190599/Audigo-AI-Job-Queue"
+    AUDIGO_AI_RESULT_QUEUE_URL: "https://sqs.ap-northeast-2.amazonaws.com/185489190599/Audigo-AI-Result-Queue"
+
+    MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "health"
+
+# 기존 ESO 리소스를 재사용하므로 차트에서 새로 생성하지 않음
+externalSecret:
+  enabled: false
+
+# 같은 Namespace의 기존 Secret 연결
+envFrom:
+  - secretRef:
+      name: backend-secrets
+
+service:
+  type: NodePort
+
+ingress:
+  enabled: false
+
+autoscaling:
+  enabled: false
+
+networkPolicy:
+  enabled: false
+
+probes:
+  path: ""
+  startup:
+    path: /actuator/health
+  readiness:
+    path: /actuator/health
