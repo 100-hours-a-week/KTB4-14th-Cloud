@@ -1,0 +1,79 @@
+# apps/spring-value/auth-api-staging.yaml
+
+labels:
+  service: auth
+  env: staging
+  component: api
+
+replicaCount: 1
+
+image:
+  repository: mingkiboo/audigo-backend
+  tag: sha-740a86e2d9f3df4ad0ced6947810884b7c763631
+  digest: sha256:21f6d85be717fd6d2abb68da8ca2207f0c185fa4937c444fe710c9d9821b404f
+
+containerPort: 8080
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 1536Mi
+  limits:
+    memory: 2Gi
+
+configMap:
+  enabled: true
+  data:
+    AUDIGO_ENVIRONMENT: "staging"
+
+    # 스테이징 MySQL
+    SPRING_DATASOURCE_URL: "jdbc:mysql://10.0.9.35:3306/audigo"
+    DB_USERNAME: "audigo_app"
+
+    # 기존 테이블 검증만 수행
+    JPA_DDL_AUTO: "validate"
+    SPRING_SQL_INIT_MODE: "never"
+
+    # DB 커넥션 풀
+    SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "6"
+    SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: "2"
+    SPRING_DATASOURCE_HIKARI_CONNECTION_TIMEOUT: "3000"
+
+    # 공유 Redis
+    AUDIGO_REDIS_HOST: "audigo-session-aofpfb.serverless.apn2.cache.amazonaws.com"
+    AUDIGO_REDIS_PORT: "6379"
+    AUDIGO_REDIS_USERNAME: "audigo"
+    AUDIGO_REDIS_SSL_ENABLED: "true"
+
+    # 스테이징 큐 사용 안 함
+    AUDIGO_SQS_ENABLED: "false"
+
+    MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "health"
+
+# 기존 ESO 리소스를 재사용하므로 차트에서 새로 생성하지 않음
+externalSecret:
+  enabled: false
+
+# 같은 Namespace의 기존 Secret 연결
+envFrom:
+  - secretRef:
+      name: backend-secrets
+
+service:
+  type: NodePort
+
+ingress:
+  enabled: false
+
+autoscaling:
+  enabled: false
+
+networkPolicy:
+  enabled: false
+
+probes:
+  path: ""
+  startup:
+    path: /actuator/health
+  readiness:
+    path: /actuator/health

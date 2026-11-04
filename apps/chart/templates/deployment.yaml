@@ -29,6 +29,10 @@ spec:
       {{- include "app-chart.selectorLabels" . | nindent 6 }}
   template:
     metadata:
+      {{- if .Values.configMap.enabled }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum | quote }}
+      {{- end }}
       labels:
         {{- include "app-chart.labels" . | nindent 8 }}
     spec:
@@ -78,8 +82,12 @@ spec:
           env:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- if or .Values.externalSecret.enabled .Values.envFrom }}
+          {{- if or .Values.configMap.enabled .Values.externalSecret.enabled .Values.envFrom }}
           envFrom:
+            {{- if .Values.configMap.enabled }}
+            - configMapRef:
+                name: {{ .Release.Name }}-config
+            {{- end }}
             {{- if .Values.externalSecret.enabled }}
             - secretRef:
                 name: {{ include "app-chart.secretName" . }}

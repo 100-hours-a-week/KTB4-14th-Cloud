@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: auth-api-staging
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/100-hours-a-week/KTB4-14th-Cloud.git
+    targetRevision: main
+    path: apps/chart
+    helm:
+      releaseName: auth-api
+      valueFiles:
+        - ../spring-value/auth-api-staging.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: auth-staging
+  # 최초 배포는 수동 Sync합니다.
+  syncPolicy:
+    syncOptions:
+      - ServerSideApply=true
