@@ -1,0 +1,34 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Read-only IAM role for Audigo AI secrets via ESO.
+
+Resources:
+  ProductionRole:
+    Type: AWS::IAM::Role
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      RoleName: audigo-eso-ai-production
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: arn:aws:iam::185489190599:role/audigo-worker-role
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: read-ai-production-secret
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                  - secretsmanager:DescribeSecret
+                  - secretsmanager:GetResourcePolicy
+                  - secretsmanager:ListSecretVersionIds
+                # Secrets Manager가 이름 뒤에 붙이는 6자리 접미사를 ?????? 로 매칭
+                Resource: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/ai/production-??????
+
+Outputs:
+  ProductionRoleArn:
+    Value: !GetAtt ProductionRole.Arn
