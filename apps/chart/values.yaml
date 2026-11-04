@@ -30,6 +30,9 @@ image:
   digest: ""
   pullPolicy: IfNotPresent # 노드에 이미지가 있으면 다시 내려받지 않음
 
+# 비공개 레지스트리(ECR) 인증 Secret. 예: [{ name: ecr-pull }]
+imagePullSecrets: []
+
 containerPort: ""
 
 # 컨테이너의 CPU 및 메모리 설정

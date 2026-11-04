@@ -1,0 +1,49 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Read-only IAM role for Audigo AI secrets via ESO.
+
+Resources:
+  ProductionRole:
+    Type: AWS::IAM::Role
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      RoleName: audigo-eso-ai-production
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: arn:aws:iam::185489190599:role/audigo-worker-role
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: read-ai-production-secret
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                  - secretsmanager:DescribeSecret
+                  - secretsmanager:GetResourcePolicy
+                  - secretsmanager:ListSecretVersionIds
+                # Secrets Manager가 이름 뒤에 붙이는 6자리 접미사를 ?????? 로 매칭
+                Resource: arn:aws:secretsmanager:ap-northeast-2:185489190599:secret:audigo/k8s/ai/production-??????
+        # ESO ECRAuthorizationToken 생성기가 이 역할로 ECR 토큰을 발급하고,
+        # 노드는 그 토큰으로 이미지를 받으므로 이미지 읽기 권한도 이 역할에 둔다.
+        - PolicyName: pull-ecr-images
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: '*' # 리소스 지정이 불가능한 액션
+              - Effect: Allow
+                Action:
+                  - ecr:BatchGetImage
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchCheckLayerAvailability
+                Resource: arn:aws:ecr:ap-northeast-2:185489190599:repository/*
+
+Outputs:
+  ProductionRoleArn:
+    Value: !GetAtt ProductionRole.Arn

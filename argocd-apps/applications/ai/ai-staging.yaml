@@ -1,0 +1,38 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ai-staging
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/100-hours-a-week/KTB4-14th-Cloud.git
+    targetRevision: main
+    path: apps/chart
+    helm:
+      releaseName: ai
+      valueFiles:
+        - ../ai-values/values-ai-staging.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ai-staging # ai-secrets-* Application이 생성
+  # Reloader가 Pod 템플릿에 남기는 annotation은 Git과 달라도 되돌리지 않음
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/template/metadata/annotations/reloader.stakater.com~1last-reloaded-from
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
+      - RespectIgnoreDifferences=true
+    # namespace나 Secret이 아직 없어 첫 동기화가 실패해도 다시 시도
+    retry:
+      limit: 5
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 5m

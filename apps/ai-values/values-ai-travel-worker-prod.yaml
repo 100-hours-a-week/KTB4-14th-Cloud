@@ -1,0 +1,82 @@
+# Helm 릴리스: travel-ai-worker, 네임스페이스: ai-prod
+labels:
+  service: travel
+  env: prod
+  component: worker
+
+replicaCount: 1
+terminationGracePeriodSeconds: 600 # 처리 중인 작업을 끝낼 시간 (5분 55초)
+
+# 일반 환경변수 (비밀값은 Secrets Manager → externalSecret으로 주입)
+env:
+  - name: AWS_REGION
+    value: ap-northeast-2
+  - name: OPENAI_MODEL
+    value: gpt-4o-mini
+  - name: AUDIGO_MODE
+    value: live
+  # SQS 워커
+  - name: AUDIGO_AI_JOB_QUEUE_URL
+    value: https://sqs.ap-northeast-2.amazonaws.com/185489190599/Audigo-AI-Job-Queue
+  - name: AUDIGO_AI_RESULT_QUEUE_URL
+    value: https://sqs.ap-northeast-2.amazonaws.com/185489190599/Audigo-AI-Result-Queue
+  - name: AUDIGO_AI_QUEUE_WORKER_MODE
+    value: live
+  - name: AUDIGO_AI_QUEUE_WORKER_CONCURRENCY
+    value: "3"
+  - name: WORKER_VERSION # 배포하는 이미지 버전과 맞출 것 (releases/ai.yml의 version)
+    value: "0.2.2"
+
+image:
+  repository: "185489190599.dkr.ecr.ap-northeast-2.amazonaws.com/audigo/mock-ai"
+  digest: "sha256:cea387039ed3867ff577ef9ec3cb47f570493bc72592adf058ecc0eda71cf850"
+
+imagePullSecrets:
+  - name: ai-image-pull
+
+containerPort: 8000
+
+resources:
+  requests: { cpu: 250m, memory: 1Gi }
+  limits: { cpu: 500m, memory: 2Gi }
+
+probes:
+  path: /health
+  startup: { periodSeconds: 15, timeoutSeconds: 3, failureThreshold: 5 }
+  readiness: { periodSeconds: 5, timeoutSeconds: 2, failureThreshold: 3 }
+  liveness: { periodSeconds: 10, timeoutSeconds: 3, failureThreshold: 3 }
+
+lifecycle:
+  preStopSleepSeconds: 0 # 요청을 받지 않으므로 종료 전 대기 불필요
+
+# 요청을 받지 않는 워커라 Service 없음
+service:
+  enabled: false
+
+externalSecret:
+  remoteKey: audigo/k8s/ai/production
+  secretStoreRef:
+    name: aws-ai
+
+# 들어오는 요청: 메트릭 수집만 허용
+# 나가는 요청: DNS, 외부 HTTPS(OpenAI, SQS), EC2 메타데이터(노드 역할 자격증명)만 허용. VPC 내부(DB, Valkey 등)는 차단
+networkPolicy:
+  enabled: true
+  ingress:
+    - from: # 메트릭 수집
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: monitoring }
+      ports: [{ port: 8000, protocol: TCP }]
+  egress:
+    - to: # DNS
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+          podSelector:
+            matchLabels: { k8s-app: kube-dns }
+      ports: [{ port: 53, protocol: UDP }, { port: 53, protocol: TCP }]
+    - to: # 외부 HTTPS
+        - ipBlock: { cidr: 0.0.0.0/0, except: [10.0.0.0/16] }
+      ports: [{ port: 443, protocol: TCP }]
+    - to: # EC2 메타데이터. SQS 권한을 노드 역할(audigo-worker-role)에서 받아옴
+        - ipBlock: { cidr: 169.254.169.254/32 }
+      ports: [{ port: 80, protocol: TCP }]

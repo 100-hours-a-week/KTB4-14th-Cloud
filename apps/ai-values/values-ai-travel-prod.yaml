@@ -1,0 +1,68 @@
+# Helm 릴리스: travel-ai, 네임스페이스: ai-prod
+labels:
+  service: travel
+  env: prod
+  component: api
+
+replicaCount: 1
+terminationGracePeriodSeconds: 600
+
+# 일반 환경변수 (비밀값은 Secrets Manager → externalSecret으로 주입)
+env:
+  - name: AWS_REGION
+    value: ap-northeast-2
+  - name: OPENAI_MODEL
+    value: gpt-4o-mini
+  - name: AUDIGO_MODE
+    value: live
+
+image:
+  repository: "185489190599.dkr.ecr.ap-northeast-2.amazonaws.com/audigo/mock-ai"
+  digest: "sha256:cea387039ed3867ff577ef9ec3cb47f570493bc72592adf058ecc0eda71cf850"
+
+imagePullSecrets:
+  - name: ai-image-pull
+
+containerPort: 8000
+
+resources:
+  requests: { cpu: 250m, memory: 1Gi }
+  limits: { cpu: 500m, memory: 2Gi }
+
+probes:
+  path: /health
+  startup: { periodSeconds: 15, timeoutSeconds: 3, failureThreshold: 5 }
+  readiness: { periodSeconds: 5, timeoutSeconds: 2, failureThreshold: 3 }
+  liveness: { periodSeconds: 10, timeoutSeconds: 3, failureThreshold: 3 }
+
+lifecycle:
+  preStopSleepSeconds: 10
+
+externalSecret:
+  remoteKey: audigo/k8s/ai/production
+  secretStoreRef:
+    name: aws-ai
+
+# 들어오는 요청: 호출하는 백엔드와 메트릭 수집만 허용
+# 나가는 요청: DNS와 외부 HTTPS(OpenAI)만 허용. VPC 내부(DB, Valkey 등)는 차단
+networkPolicy:
+  enabled: true
+  ingress:
+    - from: # 백엔드 호출
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: travel-prod }
+      ports: [{ port: 8000, protocol: TCP }]
+    - from: # 메트릭 수집
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: monitoring }
+      ports: [{ port: 8000, protocol: TCP }]
+  egress:
+    - to: # DNS
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+          podSelector:
+            matchLabels: { k8s-app: kube-dns }
+      ports: [{ port: 53, protocol: UDP }, { port: 53, protocol: TCP }]
+    - to: # 외부 HTTPS
+        - ipBlock: { cidr: 0.0.0.0/0, except: [10.0.0.0/16] }
+      ports: [{ port: 443, protocol: TCP }]
