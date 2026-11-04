@@ -5,7 +5,7 @@ labels:
   component: worker
 
 replicaCount: 1
-terminationGracePeriodSeconds: 330 # 처리 중인 작업을 끝낼 시간 (5분 55초)
+terminationGracePeriodSeconds: 600 # 처리 중인 작업을 끝낼 시간 (5분 55초)
 
 # 일반 환경변수 (비밀값은 Secrets Manager → externalSecret으로 주입)
 env:
