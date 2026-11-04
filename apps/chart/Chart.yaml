@@ -1,0 +1,4 @@
+apiVersion: v2
+name: audigo-chart
+description: Audigo 애플리케이션(Spring Boot, Fast API) Helm 차트
+version: 0.0.1

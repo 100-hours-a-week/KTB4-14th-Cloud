@@ -1,0 +1,44 @@
+{{- if .Values.ingress.enabled }}
+{{- if not .Values.service.enabled }}
+{{- fail "Ingress를 사용하려면 service.enabled를 true로 지정해 주세요" }}
+{{- end }}
+{{- $annotations := deepCopy (default dict .Values.ingress.annotations) }}
+{{- $serviceAnnotations := default dict .Values.service.annotations }}
+{{- $targetKey := "alb.ingress.kubernetes.io/target-type" }}
+{{- $targetType := coalesce (get $serviceAnnotations $targetKey) (get $annotations $targetKey) "instance" }}
+{{- if and (eq $targetType "instance") (not (has .Values.service.type (list "NodePort" "LoadBalancer"))) }}
+{{- fail "ALB target-type이 instance이면 service.type을 NodePort 또는 LoadBalancer로 지정해 주세요" }}
+{{- end }}
+{{- with .Values.ingress.group }}
+{{- $_ := set $annotations "alb.ingress.kubernetes.io/group.name" . }}
+{{- end }}
+{{- $healthKey := "alb.ingress.kubernetes.io/healthcheck-path" }}
+{{- $readinessPath := include "app-chart.probePath" (dict "root" $ "name" "readiness") }}
+{{- if and $readinessPath (not (hasKey $annotations $healthKey)) }}
+{{- $_ := set $annotations $healthKey $readinessPath }}
+{{- end }}
+{{- $host := coalesce .Values.ingress.host (get (default dict .Values.ingress.hosts) .Values.labels.env) }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    {{- include "app-chart.labels" . | nindent 4 }}
+  {{- with $annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  ingressClassName: {{ required "ingress.className을 지정해 주세요" .Values.ingress.className | quote }}
+  rules:
+    - host: {{ required "ingress.host 또는 해당 환경의 ingress.hosts 값을 지정해 주세요" $host | quote }}
+      http:
+        paths:
+          - path: {{ required "공유 ALB에서 사용할 ingress.path를 지정해 주세요" .Values.ingress.path | quote }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Release.Name }}
+                port:
+                  name: http # Service 포트 이름. 포트 번호가 바뀌어도 그대로 동작
+{{- end }}
