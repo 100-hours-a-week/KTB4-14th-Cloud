@@ -1,0 +1,27 @@
+# - 공식 Helm 차트 이용
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: metrics-server
+  namespace: argocd
+spec:
+  project: default
+
+  sources:
+    # 1) metrics-server 공식 Helm 차트
+    - repoURL: https://kubernetes-sigs.github.io/metrics-server/
+      chart: metrics-server
+      targetRevision: "3.14.0"
+      helm:
+        releaseName: metrics-server
+        valueFiles:
+          - $values/addons/metrics-server/values.yaml
+
+    # 2) values.yaml을 참조하기 위한 Git 레포 (ref 이름으로만 사용, 직접 배포하지 않음)
+    - repoURL: https://github.com/100-hours-a-week/KTB4-14th-Cloud.git
+      targetRevision: main
+      ref: values
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system  # kubectl top과 HPA에 리소스 지표를 제공하는 클러스터 애드온이기 때문에 kube-system 네임스페이스에 배포
