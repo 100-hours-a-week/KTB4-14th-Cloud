@@ -1,0 +1,30 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: travel-api-prod
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/100-hours-a-week/KTB4-14th-Cloud.git
+    targetRevision: main
+    path: apps/chart
+    helm:
+      releaseName: travel-api
+      valueFiles:
+        - ../spring-value/travel-api-prod.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: travel-prod
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      name: travel-api
+      namespace: travel-prod
+      jsonPointers:
+        - /spec/template/metadata/annotations/reloader.stakater.com~1last-reloaded-from
+  # 최초 배포는 수동 Sync합니다.
+  syncPolicy:
+    syncOptions:
+      - ServerSideApply=true
+      - RespectIgnoreDifferences=true
