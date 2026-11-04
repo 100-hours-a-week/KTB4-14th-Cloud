@@ -18,6 +18,8 @@ reloader:
     - travel-staging
     - general-prod
     - general-staging
+    - ai-prod
+    - ai-staging
 
   deployment:
     replicas: 1
