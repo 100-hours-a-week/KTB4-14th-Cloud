@@ -1,0 +1,23 @@
+# AI prod용 SecretStore. ExternalSecret은 공통 차트(apps/chart)가 릴리스마다 만든다.
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-prod
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+
+---
+apiVersion: external-secrets.io/v1
+kind: SecretStore
+metadata:
+  name: aws-ai
+  namespace: ai-prod
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  provider:
+    aws:
+      service: SecretsManager
+      region: ap-northeast-2
+      role: arn:aws:iam::185489190599:role/audigo-eso-ai-production

@@ -1,0 +1,23 @@
+# AI staging용 SecretStore. 시크릿과 IAM 역할은 production과 같이 쓴다.
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-staging
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+
+---
+apiVersion: external-secrets.io/v1
+kind: SecretStore
+metadata:
+  name: aws-ai
+  namespace: ai-staging
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  provider:
+    aws:
+      service: SecretsManager
+      region: ap-northeast-2
+      role: arn:aws:iam::185489190599:role/audigo-eso-ai-production
