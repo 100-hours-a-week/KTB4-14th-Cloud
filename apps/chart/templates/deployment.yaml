@@ -1,0 +1,119 @@
+{{- $port := .Values.containerPort }}
+{{- $preStop := .Values.lifecycle.preStopSleepSeconds }}
+{{- $grace := .Values.terminationGracePeriodSeconds | default 30 }}
+{{- if and $preStop (ge (int $preStop) (int $grace)) }}
+{{- fail "lifecycle.preStopSleepSeconds는 terminationGracePeriodSeconds보다 작아야 합니다" }}
+{{- end }}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    {{- include "app-chart.labels" . | nindent 4 }}
+  {{- if .Values.externalSecret.enabled }}
+  annotations:
+    # ESO가 Secret을 갱신하면 Reloader가 Pod를 다시 띄워 새 값을 반영합니다.
+    secret.reloader.stakater.com/reload: {{ include "app-chart.secretName" . }}
+  {{- end }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ required "replicaCount를 지정해 주세요" .Values.replicaCount }}
+  {{- end }}
+  {{- with .Values.strategy }}
+  strategy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "app-chart.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "app-chart.labels" . | nindent 8 }}
+    spec:
+      {{- $automount := .Values.automountServiceAccountToken }}
+      {{- if kindIs "bool" $automount }}
+      automountServiceAccountToken: {{ $automount }}
+      {{- else if and $automount (ne (toString $automount) "") }}
+      {{- fail "automountServiceAccountToken은 true, false 또는 빈 값으로 지정해 주세요" }}
+      {{- end }}
+      {{- with .Values.terminationGracePeriodSeconds }}
+      terminationGracePeriodSeconds: {{ . }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.workerNodeHostnames }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                      {{- toYaml . | nindent 22 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: app
+          image: {{ include "app-chart.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- if $port }}
+          ports:
+            - name: http
+              containerPort: {{ $port }}
+              protocol: TCP
+          {{- end }}
+          {{- with .Values.env }}
+          env:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if or .Values.externalSecret.enabled .Values.envFrom }}
+          envFrom:
+            {{- if .Values.externalSecret.enabled }}
+            - secretRef:
+                name: {{ include "app-chart.secretName" . }}
+            {{- end }}
+            {{- with .Values.envFrom }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- end }}
+          {{- $requests := include "app-chart.compact" .Values.resources.requests }}
+          {{- $limits := include "app-chart.compact" .Values.resources.limits }}
+          {{- if or $requests $limits }}
+          resources:
+            {{- with $requests }}
+            requests:
+              {{- . | nindent 14 }}
+            {{- end }}
+            {{- with $limits }}
+            limits:
+              {{- . | nindent 14 }}
+            {{- end }}
+          {{- end }}
+          {{- if $port }}
+          {{- range $name, $key := dict "startup" "startupProbe" "readiness" "readinessProbe" "liveness" "livenessProbe" }}
+          {{- with include "app-chart.probePath" (dict "root" $ "name" $name) }}
+          {{ $key }}:
+            httpGet:
+              path: {{ . | quote }}
+              port: http
+            {{- with (include "app-chart.compact" (omit (index $.Values.probes $name | default dict) "path")) }}
+            {{- . | nindent 12 }}
+            {{- end }}
+          {{- end }}
+          {{- end }}
+          {{- end }}
+          {{- with .Values.lifecycle.preStopSleepSeconds }}
+          lifecycle:
+            # 종료 직전에 잠시 대기해 ALB가 이 Pod를 대상에서 빼는 동안 들어온 요청을 처리합니다.
+            preStop:
+              sleep:
+                seconds: {{ . }}
+          {{- end }}

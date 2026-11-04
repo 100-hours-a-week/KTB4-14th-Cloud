@@ -1,0 +1,112 @@
+# 하나의 Helm 릴리스가 하나의 Deployment를 관리
+# 기본값은 보수적으로 정함
+
+labels:
+  service: ""
+  env: ""
+  component: ""
+
+# HPA를 쓰면 HPA가 Pod 수를 관리
+replicaCount: 2
+terminationGracePeriodSeconds: 60
+# 앱이 쿠버네티스 API를 쓰지 않으면 false
+automountServiceAccountToken: false
+
+# 롤링 업데이트 전략 이용
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0
+
+env: [] # 일반 환경변수 (Git에 남아도 되는 값) / - 로 구분해서 name, value 입력
+envFrom: [] # 추가로 주입할 ConfigMap/Secret. ESO Secret은 자동으로 붙음 /- 로 구분해서 configMapRef 또는 secretRef 입력
+
+image:
+  #repository에는 이미지 저장소, tag 또는 digest 중 하나는 반드시 지정
+  repository: ""
+  tag: ""
+  # 재빌드 없이 특정 이미지를 고정 배포할 때 지정 (예: sha256:cea3...). 있으면 tag보다 우선.
+  digest: ""
+  pullPolicy: IfNotPresent # 노드에 이미지가 있으면 다시 내려받지 않음
+
+containerPort: ""
+
+# 컨테이너의 CPU 및 메모리 설정
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+
+probes:
+  # 세 프로브가 공통으로 쓰는 경로. 없으면 프로브 생성 X
+  # 프로브별로 다르면 startup/readiness/liveness 아래에 path를 지정
+  path: ""
+  # 앱이 기동을 마쳤는지 확인. 성공할 때까지 readiness와 liveness는 실행되지 않음.
+  startup:
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 30
+  # Pod가 요청을 받을 준비가 됐는지 확인 -> Pod가 준비되지 않으면 Service에서 제외
+  readiness:
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  # 앱이 계속 정상 동작하는지 확인 -> 실패하면 컨테이너 재시작
+  liveness:
+    periodSeconds: 20
+    timeoutSeconds: 5
+    failureThreshold: 5
+
+lifecycle:
+  # 종료 전 대기 시간(초). ALB가 대상에서 이 Pod를 빼는 동안 들어온 요청을 처리. terminationGracePeriodSeconds보다 작아야 함.
+  preStopSleepSeconds: 15
+
+workerNodeHostnames: [audigo-worker-1, audigo-worker-2, audigo-worker-3]
+tolerations: []
+
+service:
+  enabled: true
+  type: ClusterIP
+
+ingress:
+  # 외부 공개는 명시적으로 켠 서비스만
+  enabled: false
+  className: audigo-alb
+  group: audigo
+  host: ""
+  hosts:
+    prod: api.audigo.kr
+    staging: staging.api.audigo.kr
+    argo: argo.audigo.kr
+  path: "" # Ingress를 켜는 경우 설정. 공유 ALB에서 서비스를 구분하는 URL 경로. 예: /match (도메인은 host/hosts)
+  annotations:
+    # HTTPS로만 받고 HTTP는 HTTPS로 리다이렉트. 인증서는 host로 ACM에서 자동 탐색
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+
+autoscaling:
+  # metrics-server 설치 후 켜기
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 2
+  targetCPUUtilizationPercentage: 70
+
+externalSecret:
+  enabled: true # 시크릿이 없는 서비스는 false
+  # Secrets Manager에 저장된 원격 Secret의 이름
+  remoteKey: ""
+  refreshInterval: 5m
+  secretStoreRef:
+    kind: SecretStore
+    name: "" # 같은 namespace의 SecretStore 이름. 예: aws-backend
+  data: [] # 비우면 원격 Secret(JSON)의 모든 키를 가져옴
+
+networkPolicy:
+  enabled: false
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress: []
