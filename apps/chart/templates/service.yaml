@@ -14,6 +14,9 @@ metadata:
   {{- end }}
 spec:
   type: {{ .Values.service.type }}
+  {{- with .Values.service.externalTrafficPolicy }}
+  externalTrafficPolicy: {{ . }}
+  {{- end }}
   selector:
     {{- include "app-chart.selectorLabels" . | nindent 4 }}
   ports:
