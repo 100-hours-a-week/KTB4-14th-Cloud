@@ -25,3 +25,10 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: kube-system  # kubectl top과 HPA에 리소스 지표를 제공하는 클러스터 애드온이기 때문에 kube-system 네임스페이스에 배포
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
