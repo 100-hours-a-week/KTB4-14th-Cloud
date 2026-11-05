@@ -80,7 +80,8 @@ metrics:
   path: /actuator/prometheus
 
 networkPolicy:
-  enabled: false
+  enabled: true
+  policyTypes: [Ingress]
 
 probes:
   path: ""
