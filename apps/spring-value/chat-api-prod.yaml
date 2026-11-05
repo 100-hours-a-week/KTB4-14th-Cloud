@@ -46,7 +46,7 @@ configMap:
     SPRING_DATA_REDIS_SSL_ENABLED: "true"
 
     # 운영 큐
-    AUDIGO_SQS_ENABLED: "true"
+    AUDIGO_SQS_ENABLED: "false"
     AWS_REGION: "ap-northeast-2"
     AUDIGO_AI_JOB_QUEUE_URL: "https://sqs.ap-northeast-2.amazonaws.com/185489190599/Audigo-AI-Job-Queue"
     AUDIGO_AI_RESULT_QUEUE_URL: "https://sqs.ap-northeast-2.amazonaws.com/185489190599/Audigo-AI-Result-Queue"
