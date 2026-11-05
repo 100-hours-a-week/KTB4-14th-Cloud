@@ -58,6 +58,11 @@ externalSecret:
   secretStoreRef:
     name: aws-ai
 
+# Prometheus 메트릭 수집 (FastAPI /metrics)
+metrics:
+  enabled: true
+  path: /metrics
+
 # 들어오는 요청: 메트릭 수집만 허용
 # 나가는 요청: DNS, 외부 HTTPS(OpenAI, SQS), EC2 메타데이터(노드 역할 자격증명)만 허용. VPC 내부(DB, Valkey 등)는 차단
 networkPolicy:
