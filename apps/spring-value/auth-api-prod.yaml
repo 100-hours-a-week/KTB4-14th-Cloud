@@ -51,7 +51,7 @@ configMap:
     AUDIGO_AI_JOB_QUEUE_URL: "https://sqs.ap-northeast-2.amazonaws.com/185489190599/Audigo-AI-Job-Queue"
     AUDIGO_AI_RESULT_QUEUE_URL: "https://sqs.ap-northeast-2.amazonaws.com/185489190599/Audigo-AI-Result-Queue"
 
-    MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "health"
+    MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "health,prometheus"
 
 # 기존 ESO 리소스를 재사용하므로 차트에서 새로 생성하지 않음
 externalSecret:
@@ -74,6 +74,11 @@ ingress:
 
 autoscaling:
   enabled: false
+
+# Prometheus 메트릭 수집 (Spring Actuator)
+metrics:
+  enabled: true
+  path: /actuator/prometheus
 
 networkPolicy:
   enabled: false
