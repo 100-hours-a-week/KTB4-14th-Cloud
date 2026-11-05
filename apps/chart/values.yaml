@@ -116,6 +116,14 @@ externalSecret:
     name: "" # 같은 namespace의 SecretStore 이름. 예: aws-backend
   data: [] # 비우면 원격 Secret(JSON)의 모든 키를 가져옴
 
+# Prometheus 메트릭 수집. 앱이 메트릭 엔드포인트를 노출하는 경우에만 켜기
+# 켜면 ServiceMonitor(Service 없으면 PodMonitor)와 NetworkPolicy의 Prometheus 허용 규칙이 자동 생성됨
+metrics:
+  enabled: false
+  path: "" # 예: Spring /actuator/prometheus, FastAPI /metrics
+  interval: 30s
+  scrapeTimeout: 10s
+
 networkPolicy:
   enabled: false
   policyTypes: [Ingress, Egress]
