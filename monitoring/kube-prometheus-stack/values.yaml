@@ -25,9 +25,6 @@ grafana:
   persistence:
     enabled: false
 
-  ingress:
-    enabled: false
-
   service:
     type: NodePort
 
@@ -53,8 +50,9 @@ grafana:
       isDefault: false
       editable: false
 
+  # monitoring.audigo.kr → 공유 ALB(group: audigo) → Grafana
   ingress:
-    enabled: false
+    enabled: true
     ingressClassName: alb
     hosts:
       - monitoring.audigo.kr
