@@ -25,6 +25,7 @@ configMap:
   enabled: true
   data:
     AUDIGO_ENVIRONMENT: "prod"
+    AUDIGO_CORS_ALLOWED_ORIGINS: "https://audigo.kr"
 
     # 운영 MySQL
     SPRING_DATASOURCE_URL: "jdbc:mysql://audigo-prd-db.c52se0u48luz.ap-northeast-2.rds.amazonaws.com:3306/audigo"
@@ -70,7 +71,17 @@ service:
   type: NodePort
 
 ingress:
-  enabled: false
+  enabled: true
+  className: alb
+  group: audigo
+  host: api.audigo.kr
+  path: /ws/chat
+  annotations:
+    alb.ingress.kubernetes.io/group.order: "50"
+    alb.ingress.kubernetes.io/target-type: "instance"
+    alb.ingress.kubernetes.io/backend-protocol: "HTTP"
+    alb.ingress.kubernetes.io/backend-protocol-version: "HTTP1"
+    alb.ingress.kubernetes.io/certificate-arn: "arn:aws:acm:ap-northeast-2:185489190599:certificate/09c54455-a23b-4a9b-b0f4-422e3746fc70"
 
 autoscaling:
   enabled: false
