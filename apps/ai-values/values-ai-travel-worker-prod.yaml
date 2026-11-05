@@ -29,7 +29,7 @@ env:
 
 image:
   repository: "185489190599.dkr.ecr.ap-northeast-2.amazonaws.com/audigo/mock-ai"
-  digest: "sha256:cea387039ed3867ff577ef9ec3cb47f570493bc72592adf058ecc0eda71cf850"
+  digest: "sha256:4a3c8877590ea48cd0cdff788f3dda96942b3277767f0a262cb1e59637ea5a66"
 
 imagePullSecrets:
   - name: ai-image-pull
