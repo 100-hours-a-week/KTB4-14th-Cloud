@@ -90,3 +90,34 @@ spec:
     syncOptions:
       - CreateNamespace=true
       - ServerSideApply=true
+---
+# YACE: CloudWatch의 SQS 지표(대기 메시지 수, 가장 오래된 메시지 나이 등)를 Prometheus로 수집
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: yace
+  namespace: argocd
+spec:
+  project: default
+
+  sources:
+    - repoURL: https://prometheus-community.github.io/helm-charts
+      chart: yet-another-cloudwatch-exporter
+      targetRevision: "0.39.1"
+      helm:
+        releaseName: yace
+        valueFiles:
+          - $values/monitoring/yace/values.yaml
+
+    - repoURL: https://github.com/100-hours-a-week/KTB4-14th-Cloud.git
+      targetRevision: main
+      ref: values
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
