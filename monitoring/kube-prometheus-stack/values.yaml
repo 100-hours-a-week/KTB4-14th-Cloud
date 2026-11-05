@@ -53,6 +53,8 @@ grafana:
   # monitoring.audigo.kr → 공유 ALB(group: audigo) → Grafana
   ingress:
     enabled: true
+  ingress:
+    enabled: false
     ingressClassName: alb
     hosts:
       - monitoring.audigo.kr

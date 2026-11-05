@@ -143,3 +143,4 @@ AWS 인증 정보, 환경 변수 및 개인 키는 커밋하지 않습니다.
 
 - [CI/CD 설정 및 운영 가이드](docs/infrastructure-cicd.md)
 - [파일과 스택 매핑](deploy/stacks.json)
+- [서비스 릴리즈 규칙 참고](docs/naming-conventions.md)

@@ -55,7 +55,9 @@ metrics:
 networkPolicy:
   enabled: true
   ingress:
-    - from: # 백엔드 호출 (travel, general)
+    - from: # 백엔드 호출 (auth, travel, general)
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: auth-staging }
         - namespaceSelector:
             matchLabels: { kubernetes.io/metadata.name: travel-staging }
         - namespaceSelector:
