@@ -1,3 +1,5 @@
+# YACE(Yet Another CloudWatch Exporter): CloudWatch의 SQS 지표를 Prometheus 형식으로 노출
+# 필요한 노드 역할 권한: cloudwatch:GetMetricData, cloudwatch:GetMetricStatistics, cloudwatch:ListMetrics
 replicaCount: 1
 
 nodeSelector:
@@ -19,6 +21,9 @@ resources:
 serviceAccount:
   create: true
 
+# helm test용 연결 확인 Pod는 만들지 않음
+testConnection: false
+
 # 정적 AWS 키를 넣지 않습니다.
 # 이 예시는 Pod가 노드 인스턴스 역할을 사용할 수 있다는 전제입니다.
 extraEnv:
@@ -27,9 +32,9 @@ extraEnv:
   - name: AWS_DEFAULT_REGION
     value: ap-northeast-2
 
+# CloudWatch 조회 주기(초). ServiceMonitor interval과 맞춤
 extraArgs:
   scraping-interval: "60"
-  disable-account-alias-lookup: "true"
 
 serviceMonitor:
   enabled: true

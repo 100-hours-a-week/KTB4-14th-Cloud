@@ -9,8 +9,7 @@ replicaCount: 1
 
 image:
   repository: mingkiboo/audigo-backend
-  tag: sha-740a86e2d9f3df4ad0ced6947810884b7c763631
-  digest: sha256:21f6d85be717fd6d2abb68da8ca2207f0c185fa4937c444fe710c9d9821b404f
+  digest: sha256:ef4d2540ba083252b0cf2a7509d89f3d027e402139e071d153839e9416779efb
 
 containerPort: 8080
 
@@ -51,7 +50,7 @@ configMap:
     # 스테이징 큐 사용 안 함
     AUDIGO_SQS_ENABLED: "false"
 
-    MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "health"
+    MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "health,prometheus"
 
 # 기존 ESO 리소스를 재사용하므로 차트에서 새로 생성하지 않음
 externalSecret:
@@ -88,6 +87,11 @@ ingress:
 
 autoscaling:
   enabled: false
+
+# Prometheus 메트릭 수집 (Spring Actuator)
+metrics:
+  enabled: true
+  path: /actuator/prometheus
 
 networkPolicy:
   enabled: false

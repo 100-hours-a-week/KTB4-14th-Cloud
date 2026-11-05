@@ -17,7 +17,24 @@ spec:
     {{- toYaml $policy.policyTypes | nindent 4 }}
   {{- if has "Ingress" $policy.policyTypes }}
   ingress:
-    {{- toYaml (default (list) $policy.ingress) | nindent 4 }}
+    {{- with $policy.ingress }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- if $.Values.metrics.enabled }}
+    # 메트릭 수집: monitoring 네임스페이스의 Prometheus 파드만 허용 (metrics.enabled면 자동 추가)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - port: {{ $.Values.containerPort }}
+          protocol: TCP
+    {{- else if not $policy.ingress }}
+    []
+    {{- end }}
   {{- end }}
   {{- if has "Egress" $policy.policyTypes }}
   egress:

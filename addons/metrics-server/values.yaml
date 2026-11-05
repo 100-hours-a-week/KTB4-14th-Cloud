@@ -1,0 +1,31 @@
+replicas: 1
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 200Mi
+
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - audigo-worker-1
+                - audigo-worker-2
+                - audigo-worker-3
+
+  # 레플리카끼리 같은 노드에 몰리지 않도록 분산 배치 - 선호
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          # 노드(hostname) 단위로 분산
+          topologyKey: kubernetes.io/hostname
+          # metrics-server 파드끼리만 서로 회피
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: metrics-server
+              app.kubernetes.io/instance: metrics-server

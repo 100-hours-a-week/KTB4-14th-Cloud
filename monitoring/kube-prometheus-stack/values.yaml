@@ -4,6 +4,10 @@ alertmanager:
 grafana:
   enabled: true
 
+  grafana.ini:
+    server:
+      root_url: https://monitoring.audigo.kr
+
   nodeSelector:
     role: monitoring
 
@@ -25,7 +29,7 @@ grafana:
     enabled: false
 
   service:
-    type: ClusterIP
+    type: NodePort
 
   resources:
     requests:
@@ -48,6 +52,21 @@ grafana:
       url: http://loki.monitoring.svc.cluster.local:3100
       isDefault: false
       editable: false
+
+  ingress:
+    enabled: false
+    ingressClassName: alb
+    hosts:
+      - monitoring.audigo.kr
+    path: /
+    annotations:
+      alb.ingress.kubernetes.io/target-type: instance
+      alb.ingress.kubernetes.io/backend-protocol: HTTP
+      alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
+      alb.ingress.kubernetes.io/ssl-redirect: "443"
+      alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:ap-northeast-2:185489190599:certificate/2210e293-483d-40ed-9e92-904e7f69f5e6
+      alb.ingress.kubernetes.io/healthcheck-path: /api/health
+      alb.ingress.kubernetes.io/success-codes: "200"
 
 prometheus:
   enabled: true

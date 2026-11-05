@@ -18,7 +18,7 @@ env:
 
 image:
   repository: "185489190599.dkr.ecr.ap-northeast-2.amazonaws.com/audigo/mock-ai"
-  digest: "sha256:cea387039ed3867ff577ef9ec3cb47f570493bc72592adf058ecc0eda71cf850"
+  digest: "sha256:4a3c8877590ea48cd0cdff788f3dda96942b3277767f0a262cb1e59637ea5a66"
 
 imagePullSecrets:
   - name: ai-image-pull
@@ -42,6 +42,11 @@ externalSecret:
   remoteKey: audigo/k8s/ai/production
   secretStoreRef:
     name: aws-ai
+
+# Prometheus 메트릭 수집 (FastAPI /metrics)
+metrics:
+  enabled: true
+  path: /metrics
 
 # 들어오는 요청: 호출하는 백엔드와 메트릭 수집만 허용
 # 나가는 요청: DNS와 외부 HTTPS(OpenAI)만 허용. VPC 내부(DB, Valkey 등)는 차단

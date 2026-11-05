@@ -1,10 +1,10 @@
 controller:
-  type: daemonset
+  type: daemonset # 배치 가능한 노드마다 Alloy 파드를 하나 실행
 
   nodeSelector:
     kubernetes.io/os: linux
 
-  tolerations:
+  tolerations: # NoSchedule taint가 있는 노드에도 Alloy 배치를 허용
     - operator: Exists
       effect: NoSchedule
 
@@ -17,8 +17,8 @@ controller:
 
 alloy:
   enableReporting: false
-
-  storagePath: /var/lib/alloy
+  stabilityLevel: experimental # 전송 WAL 사용
+  storagePath: /var/lib/alloy # 파일 읽기 위치와 WAL을 각 노드에 저장
 
   extraEnv:
     - name: NODE_NAME
@@ -26,7 +26,7 @@ alloy:
         fieldRef:
           fieldPath: spec.nodeName
 
-  mounts:
+  mounts: # 노드의 /var/log 아래에 있는 컨테이너 로그 파일을 읽음
     varlog: true
     extra:
       - name: alloy-state
@@ -39,7 +39,7 @@ alloy:
       drop:
         - ALL
 
-  resources:
+  resources: # 로그 읽기·파싱·WAL 처리·전송을 포함한 Alloy 컨테이너 메모리 한도 - 부족하면 늘리기
     requests:
       cpu: 50m
       memory: 128Mi
@@ -53,6 +53,7 @@ alloy:
         format = "logfmt"
       }
 
+      // 각 Alloy는 자신이 실행 중인 노드의 파드만 탐색합니다.
       discovery.kubernetes "pods" {
         role = "pod"
 
@@ -65,14 +66,14 @@ alloy:
       discovery.relabel "pod_logs" {
         targets = discovery.kubernetes.pods.targets
 
-        // 수집 namespace입니다.
-        // 여러 개라면 "app|다른namespace" 형태로 수정합니다.
+        // Spring 8개와 AI 2개 운영·스테이징 namespace의 로그를 수집합니다.
         rule {
           source_labels = ["__meta_kubernetes_namespace"]
-          regex         = "app"
+          regex         = "(auth|chat|travel|general|ai)-(prod|staging)"
           action        = "keep"
         }
 
+        // Grafana에서 로그를 필터링할 때 사용할 라벨입니다.
         rule {
           source_labels = ["__meta_kubernetes_namespace"]
           target_label  = "namespace"
@@ -93,6 +94,7 @@ alloy:
           target_label  = "node"
         }
 
+        // 파드 UID와 컨테이너 이름으로 노드의 로그 파일 경로를 만듭니다.
         rule {
           source_labels = [
             "__meta_kubernetes_pod_uid",
@@ -105,6 +107,7 @@ alloy:
       }
 
       local.file_match "pod_logs" {
+        // CRI 형식에서 타임스탬프와 로그 본문을 분리합니다.
         path_targets = discovery.relabel.pod_logs.output
       }
 
@@ -120,11 +123,19 @@ alloy:
       }
 
       loki.write "default" {
+        // 클러스터 내부의 Loki Service로 로그를 전송합니다.
         endpoint {
           url = "http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push"
         }
+
+        // Loki로 보내기 전에 로그를 현재 노드의 디스크에 기록합니다.
+        wal {
+          enabled         = true
+          max_segment_age = "6h"
+        }
       }
 
+# kube-prometheus-stack이 Alloy 자체 메트릭을 수집하도록 함
 serviceMonitor:
   enabled: true
   additionalLabels:
