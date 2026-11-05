@@ -59,3 +59,34 @@ spec:
     syncOptions:
       - CreateNamespace=true
       - ServerSideApply=true
+---
+# Alloy: 각 노드의 파드 로그를 읽어 Loki로 전송하는 DaemonSet
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: alloy
+  namespace: argocd
+spec:
+  project: default
+
+  sources:
+    - repoURL: https://grafana.github.io/helm-charts
+      chart: alloy
+      targetRevision: "1.15.0"
+      helm:
+        releaseName: alloy
+        valueFiles:
+          - $values/monitoring/alloy/values.yaml
+
+    - repoURL: https://github.com/100-hours-a-week/KTB4-14th-Cloud.git
+      targetRevision: main
+      ref: values
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
