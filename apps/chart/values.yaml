@@ -93,6 +93,7 @@ ingress:
     prod: api.audigo.kr
     staging: staging.api.audigo.kr
   path: "" # Ingress를 켜는 경우 설정. 공유 ALB에서 서비스를 구분하는 URL 경로. 예: /match (도메인은 host/hosts)
+  paths: [] # 각 항목에 path와 선택적인 pathType 지정. 비워 두면 path 사용
   annotations:
     # HTTPS로만 받고 HTTP는 HTTPS로 리다이렉트. 인증서는 host로 ACM에서 자동 탐색
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'

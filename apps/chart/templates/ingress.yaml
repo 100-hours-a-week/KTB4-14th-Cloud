@@ -18,6 +18,7 @@
 {{- $_ := set $annotations $healthKey $readinessPath }}
 {{- end }}
 {{- $host := coalesce .Values.ingress.host (get (default dict .Values.ingress.hosts) .Values.labels.env) }}
+{{- $paths := default (list (dict "path" .Values.ingress.path)) .Values.ingress.paths }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -34,11 +35,13 @@ spec:
     - host: {{ required "ingress.host 또는 해당 환경의 ingress.hosts 값을 지정해 주세요" $host | quote }}
       http:
         paths:
-          - path: {{ required "공유 ALB에서 사용할 ingress.path를 지정해 주세요" .Values.ingress.path | quote }}
-            pathType: Prefix
+          {{- range $paths }}
+          - path: {{ required "공유 ALB에서 사용할 ingress.path 또는 ingress.paths[].path를 지정해 주세요" .path | quote }}
+            pathType: {{ default "Prefix" .pathType }}
             backend:
               service:
-                name: {{ .Release.Name }}
+                name: {{ $.Release.Name }}
                 port:
                   name: http # Service 포트 이름. 포트 번호가 바뀌어도 그대로 동작
+          {{- end }}
 {{- end }}
