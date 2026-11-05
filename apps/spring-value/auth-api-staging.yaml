@@ -24,6 +24,7 @@ resources:
 configMap:
   enabled: true
   data:
+    KAKAO_REDIRECT_URI: "https://dev.audigo.kr/auth/kakao"
     AUDIGO_CORS_ALLOWED_ORIGINS: "https://dev.audigo.kr"
     AUDIGO_ENVIRONMENT: "staging"
 
