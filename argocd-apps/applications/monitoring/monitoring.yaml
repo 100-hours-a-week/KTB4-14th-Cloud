@@ -23,8 +23,10 @@ spec:
     server: https://kubernetes.default.svc
     namespace: monitoring
 
-  # 최초 배포는 수동 Sync합니다.
   syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
     syncOptions:
       - CreateNamespace=true
       - ServerSideApply=true
@@ -56,6 +58,9 @@ spec:
     namespace: monitoring
 
   syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
     syncOptions:
       - CreateNamespace=true
       - ServerSideApply=true
@@ -87,6 +92,9 @@ spec:
     namespace: monitoring
 
   syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
     syncOptions:
       - CreateNamespace=true
       - ServerSideApply=true
@@ -118,6 +126,9 @@ spec:
     namespace: monitoring
 
   syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
     syncOptions:
       - CreateNamespace=true
       - ServerSideApply=true
