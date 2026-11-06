@@ -7,6 +7,8 @@ grafana:
   grafana.ini:
     server:
       root_url: https://monitoring.audigo.kr
+    paths:
+      data: /var/lib/grafana-data
 
   nodeSelector:
     role: monitoring
@@ -24,6 +26,19 @@ grafana:
 
   persistence:
     enabled: false
+
+  extraVolumes:
+    - name: grafana-host-storage
+      hostPath:
+        path: /monitoring/grafana
+        type: Directory
+
+  extraVolumeMounts:
+    - name: grafana-host-storage
+      mountPath: /var/lib/grafana-data
+
+  deploymentStrategy:
+    type: Recreate
 
   service:
     type: NodePort
@@ -75,6 +90,7 @@ prometheus:
   prometheusSpec:
     replicas: 1
     retention: 35d
+    retentionSize: 18GB
 
     nodeSelector:
       role: monitoring
