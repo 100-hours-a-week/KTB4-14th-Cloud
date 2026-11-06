@@ -93,6 +93,12 @@ config: |
           length: 300
           delay: 60
 
+        - name: NumberOfMessagesReceived
+          statistics: [Sum]
+          period: 60
+          length: 300
+          delay: 60
+
     - name: audigo-ai-result-queue
       namespace: AWS/SQS
       regions:
@@ -128,6 +134,12 @@ config: |
           delay: 60
 
         - name: NumberOfMessagesDeleted
+          statistics: [Sum]
+          period: 60
+          length: 300
+          delay: 60
+
+        - name: NumberOfMessagesReceived
           statistics: [Sum]
           period: 60
           length: 300
