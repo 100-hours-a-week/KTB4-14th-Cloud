@@ -90,6 +90,7 @@ prometheus:
   prometheusSpec:
     replicas: 1
     retention: 35d
+    retentionSize: 18GB
 
     nodeSelector:
       role: monitoring
