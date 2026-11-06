@@ -51,6 +51,8 @@ configMap:
     AUDIGO_SQS_ENABLED: "false"
 
     MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "health,prometheus"
+    
+    SERVER_TOMCAT_MBEANREGISTRY_ENABLED: "true"
 
 # 기존 ESO 리소스를 재사용하므로 차트에서 새로 생성하지 않음
 externalSecret:
