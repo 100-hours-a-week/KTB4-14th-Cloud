@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "source_repository": "100-hours-a-week/KTB4-14th-mockAI",
+  "source_sha": "1ed7d1b77bdd4743f7c519bc7aee87a7e4ab2569",
+  "source_ref": "refs/heads/main",
+  "image_repository": "185489190599.dkr.ecr.ap-northeast-2.amazonaws.com/audigo/mock-ai",
+  "image_tag": "0.2.4",
+  "image_digest": "sha256:295daa2feacc75690876f411052b262c6a516fd862fd0767cdb5b8e865335034",
+  "platform": "linux/arm64",
+  "workflow_run_id": "42600060400",
+  "workflow_run_attempt": "1",
+  "workflow_run_url": "https://github.com/100-hours-a-week/KTB4-14th-mockAI/actions/runs/42600060400"
+}
