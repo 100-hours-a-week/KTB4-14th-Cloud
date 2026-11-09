@@ -1,0 +1,67 @@
+name: Update staging AI image
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id: {description: mockAI AI Image CD run ID, required: true, type: string}
+      run_attempt: {description: mockAI AI Image CD run attempt, required: true, type: string}
+
+concurrency:
+  group: staging-ai-image-update
+  cancel-in-progress: false
+permissions: {contents: read, id-token: write}
+jobs:
+  update:
+    if: github.repository == '100-hours-a-week/KTB4-14th-Cloud' && github.ref == 'refs/heads/main'
+    permissions: {contents: write, id-token: write}
+    runs-on: ubuntu-24.04
+    env:
+      RUN_ID: ${{ inputs.run_id }}
+      RUN_ATTEMPT: ${{ inputs.run_attempt }}
+      AI_READ_TOKEN: ${{ secrets.AI_READ_TOKEN }}
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: {ref: main, fetch-depth: 0, persist-credentials: false}
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: ai-staging-${{ github.run_id }}
+      - name: Install YAML parser
+        run: |
+          python3 -m venv "$RUNNER_TEMP/ai-staging-venv"
+          "$RUNNER_TEMP/ai-staging-venv/bin/pip" install --no-cache-dir --no-deps -r scripts/requirements-staging-values.txt
+      - name: Set up Docker Buildx for manifest verification
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Authenticate Docker to ECR for manifest verification
+        run: |
+          registry=$("$RUNNER_TEMP/ai-staging-venv/bin/python" -c 'from ruamel.yaml import YAML; print(YAML(typ="safe").load(open("apps/ai-values/values-ai-staging.yaml"))["image"]["repository"].split("/", 1)[0])')
+          aws ecr get-login-password | docker login --username AWS --password-stdin "$registry"
+      - name: Validate and publish AI staging candidate
+        id: candidate
+        env:
+          CLOUD_GIT_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          auth_dir=$(mktemp -d)
+          trap 'rm -rf "$auth_dir"' EXIT
+          cat > "$auth_dir/askpass" <<'ASKPASS'
+          #!/bin/sh
+          case "$1" in
+            *Username*) printf '%s\n' x-access-token ;;
+            *Password*) printf '%s\n' "$CLOUD_GIT_TOKEN" ;;
+            *) exit 1 ;;
+          esac
+          ASKPASS
+          chmod 700 "$auth_dir/askpass"
+          GIT_ASKPASS="$auth_dir/askpass" GIT_TERMINAL_PROMPT=0 "$RUNNER_TEMP/ai-staging-venv/bin/python" scripts/ai_staging.py | tee "$RUNNER_TEMP/ai-staging-result.json"
+          "$RUNNER_TEMP/ai-staging-venv/bin/python" -c 'import json, os; d=json.load(open(os.environ["RUNNER_TEMP"] + "/ai-staging-result.json")); print("published=" + str(d["status"] == "published").lower(), file=open(os.environ["GITHUB_OUTPUT"], "a"))'
+      - name: Upload published AI staging result
+        if: steps.candidate.outputs.published == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: staging-ai-result-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ai-staging-result.json
+          if-no-files-found: error
