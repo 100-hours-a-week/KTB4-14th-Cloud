@@ -3,6 +3,10 @@ name: Preview or propose backend production promotion
 # 운영 승격은 사람이 검증한 후보를 지정해 수동 실행합니다.
 # preview는 대상·근거만 출력하고, pr은 Git 변경 제안까지만 생성합니다.
 on:
+  workflow_run:
+    workflows: [Update staging backend image]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
     inputs:
       run_id:
@@ -46,9 +50,121 @@ permissions:
   contents: read
 
 jobs:
+  auto-preview:
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.repository == '100-hours-a-week/KTB4-14th-Cloud' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    permissions:
+      contents: read
+      actions: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      has_targets: ${{ steps.preview.outputs.has_targets }}
+      fingerprint: ${{ steps.preview.outputs.fingerprint }}
+    steps:
+      - name: Checkout trusted Cloud main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          path: cloud
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Checkout BE main history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: 100-hours-a-week/KTB4-14th-BE
+          ref: main
+          path: be
+          token: ${{ secrets.BE_READ_TOKEN }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Registry inspection
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Install YAML validation dependency
+        working-directory: cloud
+        run: |
+          python3 -m venv "$RUNNER_TEMP/production-values-venv"
+          "$RUNNER_TEMP/production-values-venv/bin/pip" install --no-cache-dir --no-deps -r scripts/requirements-staging-values.txt
+      - name: Validate staging result and preview production
+        id: preview
+        working-directory: cloud
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+          GH_TOKEN: ${{ secrets.BE_READ_TOKEN }}
+          CLOUD_READ_TOKEN: ${{ github.token }}
+        run: |
+          "$RUNNER_TEMP/production-values-venv/bin/python" scripts/backend_production.py \
+            --be "$GITHUB_WORKSPACE/be" --mode auto-preview
+
+  approved-promotion:
+    needs: auto-preview
+    if: needs.auto-preview.outputs.has_targets == 'true'
+    environment: backend-production
+    permissions:
+      contents: read
+      actions: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout latest Cloud main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          path: cloud
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Checkout BE main history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: 100-hours-a-week/KTB4-14th-BE
+          ref: main
+          path: be
+          token: ${{ secrets.BE_READ_TOKEN }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Registry inspection
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Install YAML validation dependency
+        working-directory: cloud
+        run: |
+          python3 -m venv "$RUNNER_TEMP/production-values-venv"
+          "$RUNNER_TEMP/production-values-venv/bin/pip" install --no-cache-dir --no-deps -r scripts/requirements-staging-values.txt
+      - name: Revalidate approved plan and propose production images
+        working-directory: cloud
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+          GH_TOKEN: ${{ secrets.BE_READ_TOKEN }}
+          CLOUD_READ_TOKEN: ${{ github.token }}
+          CLOUD_PR_TOKEN: ${{ secrets.CLOUD_PR_TOKEN }}
+          APPROVED_FINGERPRINT: ${{ needs.auto-preview.outputs.fingerprint }}
+        run: |
+          set -euo pipefail
+          auth_dir=$(mktemp -d "$RUNNER_TEMP/production-auth.XXXXXX")
+          trap 'rm -rf "$auth_dir"' EXIT
+          cat > "$auth_dir/askpass" <<'ASKPASS'
+          #!/bin/sh
+          case "$1" in
+            *Username*) printf '%s\n' x-access-token ;;
+            *Password*) printf '%s\n' "$CLOUD_PR_TOKEN" ;;
+            *) exit 1 ;;
+          esac
+          ASKPASS
+          chmod 700 "$auth_dir/askpass"
+          GIT_ASKPASS="$auth_dir/askpass" GIT_TERMINAL_PROMPT=0 \
+            "$RUNNER_TEMP/production-values-venv/bin/python" scripts/backend_production.py \
+            --be "$GITHUB_WORKSPACE/be" --mode auto-approved
+
   promote:
     # 기능 브랜치의 임의 workflow 실행을 막고, main에서 실행한 수동 요청만 허용합니다.
-    if: github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    environment: backend-production
+    permissions:
+      contents: read
+      actions: read
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
@@ -97,6 +213,7 @@ jobs:
           PROMOTION_MODE: ${{ inputs.mode }}
           # BE API는 기존 읽기 토큰으로 조회합니다. 해당 토큰의 권한을 확대하지 않습니다.
           GH_TOKEN: ${{ secrets.BE_READ_TOKEN }}
+          CLOUD_READ_TOKEN: ${{ github.token }}
           # PR 모드에만 Cloud 쓰기 토큰을 전달합니다. preview에는 빈 문자열을 전달합니다.
           # GitHub App을 선택하면 installation token 발급 단계를 별도로 구성해야 합니다.
           CLOUD_PR_TOKEN: ${{ inputs.mode == 'pr' && secrets.CLOUD_PR_TOKEN || '' }}

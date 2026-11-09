@@ -137,7 +137,8 @@ class RetryTests(unittest.TestCase):
 
     def test_normal_push_and_resource_cleanup(self):
         result = retry.publish(self.dev, candidate(), api=self.api(), temp_parent=self.home)
-        self.assertEqual(result, {'status': 'published', 'attempts': 1, 'decision': 'first-registration'})
+        self.assertEqual(result, {'status': 'published', 'attempts': 1, 'decision': 'first-registration',
+                                  'cloud_commit': self.cmd('git', '--git-dir', self.remote, 'rev-parse', 'main').stdout.strip()})
         record = json.loads(self.remote_text('apps/spring-value/staging-backend-candidate.json'))
         self.assertEqual(record, candidate())
         self.assertIn('tag: sha-' + B, self.remote_text('apps/spring-value/auth-api-staging.yaml'))
@@ -155,7 +156,8 @@ class RetryTests(unittest.TestCase):
             return original(git, *args, **kwargs)
         with patch.object(retry.Git, 'run', inject):
             result = retry.publish(self.dev, candidate(), api=self.api(), temp_parent=self.home)
-        self.assertEqual(result, {'status': 'published', 'attempts': 2, 'decision': 'first-registration'})
+        self.assertEqual(result, {'status': 'published', 'attempts': 2, 'decision': 'first-registration',
+                                  'cloud_commit': self.cmd('git', '--git-dir', self.remote, 'rev-parse', 'main').stdout.strip()})
         self.assertEqual(self.remote_text('unrelated.txt'), 'preserved\n')
         self.assert_dev_unchanged()
 
@@ -263,6 +265,7 @@ class RetryTests(unittest.TestCase):
         with patch.object(retry.Git, 'run', inject):
             result = retry.publish(self.dev, candidate(), api=self.api(), temp_parent=self.home)
         self.assertEqual(result['status'], 'published')
+        self.assertEqual(result['cloud_commit'], self.cmd('git', '--git-dir', self.remote, 'rev-parse', 'main').stdout.strip())
         # The public contract intentionally stays the same after reconciliation.
         self.assertEqual(result['attempts'], 1)
 

@@ -112,13 +112,13 @@ def _publish(repo, candidate, api, temp_parent):
                 commit = work.run('rev-parse', 'HEAD').stdout.strip()
                 pushed = work.run('push', '--porcelain', 'origin', 'HEAD:refs/heads/main', check=False)
                 if pushed.returncode == 0:
-                    return {'status': 'published', 'attempts': attempt, 'decision': decision}
+                    return {'status': 'published', 'attempts': attempt, 'decision': decision, 'cloud_commit': commit}
                 kind = classify_push(pushed)
                 if kind == 'denied':
                     raise RetryError('Push denied: authentication, permissions, server hook or branch protection')
                 if kind == 'unknown':
                     if confirmed(git, commit):
-                        return {'status': 'published', 'attempts': attempt, 'decision': decision}
+                        return {'status': 'published', 'attempts': attempt, 'decision': decision, 'cloud_commit': commit}
                     raise RetryError('Push failed with unknown cause; remote does not confirm this commit')
                 # Explicit NFF only: next iteration fetches/rejudges/regenerates everything.
             finally:

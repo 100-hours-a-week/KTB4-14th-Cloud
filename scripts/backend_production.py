@@ -1,6 +1,7 @@
 """Manual production promotion. Preview is read-only; only seven image fields may change."""
 import argparse
 from datetime import datetime
+import hashlib
 import io
 import json
 import os
@@ -8,6 +9,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import zipfile
 
 import backend_staging as staging
 import backend_staging_values as values
@@ -16,6 +18,7 @@ GROUPS = {'auth': ('auth-api',), 'chat': ('chat-api', 'chat-ws'),
           'travel': ('travel-api', 'travel-worker'), 'general': ('general-api', 'general-ws')}
 TARGETS = tuple(t for group in GROUPS.values() for t in group)
 BASELINE = 'deploy/backend-production-baseline.json'
+CLOUD_REPO = '100-hours-a-week/KTB4-14th-Cloud'
 
 
 def require(ok, message):
@@ -61,8 +64,9 @@ def changed_paths(be, old, new):
 def plan(root, be, candidate, expected_digest, evidence):
     values.validate_candidate(candidate)
     require(candidate['image_digest'] == expected_digest, 'Requested digest does not match validated artifact')
-    require(isinstance(evidence, str) and 20 <= len(evidence.strip()) <= 8000,
-            'Provide human staging evidence: both deployments, digest, time, checks and verifier')
+    if evidence is not None:
+        require(isinstance(evidence, str) and 20 <= len(evidence.strip()) <= 8000,
+                'Provide human staging evidence: both deployments, digest, time, checks and verifier')
     require(values.validate_candidate(values.load_json((root / values.RECORD).read_text())) == candidate,
             'Cloud main staging candidate is different from requested candidate')
     for name in values.VALUES:
@@ -178,13 +182,189 @@ def no_open_promotion():
             'An open production promotion PR exists')
 
 
+def staging_result(run_id, attempt):
+    require(staging.positive(run_id) and staging.positive(attempt), 'Invalid Cloud run ID or attempt')
+    env = dict(os.environ, GH_TOKEN=os.environ['CLOUD_READ_TOKEN'])
+    base = f'repos/{CLOUD_REPO}/actions'
+    pages = json.loads(command('gh', 'api', '--paginate', '--slurp',
+                               f'{base}/runs/{run_id}/artifacts?per_page=100', env=env))
+    name = f'staging-backend-result-{run_id}-{attempt}'
+    matches = [a for page in pages for a in page['artifacts'] if a['name'] == name]
+    if not matches:
+        return None
+    require(len(matches) == 1 and matches[0]['expired'] is False
+            and type(matches[0]['id']) is int and 0 < matches[0]['size_in_bytes'] <= 65536,
+            'Invalid staging result artifact')
+    raw = subprocess.check_output(['gh', 'api', f"{base}/artifacts/{matches[0]['id']}/zip"], env=env, stderr=subprocess.PIPE)
+    require(len(raw) <= 65536, 'Staging result artifact too large')
+    with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+        entries = archive.infolist()
+        require(len(entries) == 1 and entries[0].filename == 'staging-result.json'
+                and entries[0].file_size <= 16384, 'Invalid staging result archive')
+        return values.load_json(archive.read(entries[0]).decode('utf-8'))
+
+
+def current_staging_candidate():
+    env = dict(os.environ, GH_TOKEN=os.environ['CLOUD_READ_TOKEN'])
+    raw = command('gh', 'api', '-H', 'Accept: application/vnd.github.raw+json',
+                  f'repos/{CLOUD_REPO}/contents/{values.RECORD}?ref=main', env=env)
+    return values.validate_candidate(values.load_json(raw))
+
+
+def require_approval_environment():
+    env = dict(os.environ, GH_TOKEN=os.environ['CLOUD_READ_TOKEN'])
+    data = json.loads(command('gh', 'api', f'repos/{CLOUD_REPO}/environments/backend-production', env=env))
+    require(any(rule.get('type') == 'required_reviewers' and rule.get('reviewers')
+                for rule in data.get('protection_rules', [])),
+            'backend-production environment must require an assigned reviewer')
+
+
+def validate_staging_result(root, result):
+    require(isinstance(result, dict) and result.get('status') == 'published', 'Staging did not publish')
+    commit = result.get('cloud_commit')
+    require(isinstance(commit, str) and re.fullmatch('[0-9a-f]{40}', commit), 'Invalid Cloud commit')
+    command('git', 'merge-base', '--is-ancestor', commit, 'HEAD', cwd=root)
+    candidate = values.validate_candidate(values.load_json(command('git', 'show', f'{commit}:{values.RECORD}', cwd=root)))
+    for key in ('workflow_run_id', 'workflow_run_attempt', 'source_sha', 'image_digest'):
+        require(result.get(key) == candidate[key], 'Artifact and Cloud commit candidate differ')
+    require(values.validate_candidate(values.load_json((root / values.RECORD).read_text())) == candidate,
+            'Cloud main staging candidate has changed')
+    for name in values.VALUES:
+        doc, _ = values.parse_yaml(command('git', 'show', f'{commit}:{name}', cwd=root))
+        require(doc['image'].get('tag') == candidate['image_tag'] and doc['image']['digest'] == candidate['image_digest'],
+                'Published commit staging values differ from candidate')
+    return candidate
+
+
+def auto_preview(root, be):
+    event = values.load_json(Path(os.environ['GITHUB_EVENT_PATH']).read_text())
+    run = event['workflow_run']
+    require(os.environ.get('GITHUB_EVENT_NAME') == 'workflow_run'
+            and os.environ.get('GITHUB_REPOSITORY') == CLOUD_REPO
+            and run.get('name') == 'Update staging backend image'
+            and run.get('path') == '.github/workflows/backend-staging.yml'
+            and run.get('head_branch') == 'main' and run.get('status') == 'completed'
+            and run.get('conclusion') == 'success'
+            and run.get('repository', {}).get('full_name') == CLOUD_REPO
+            and run.get('head_repository', {}).get('full_name') == CLOUD_REPO,
+            'Untrusted staging workflow run')
+    run_id, attempt = str(run['id']), str(run['run_attempt'])
+    result = staging_result(run_id, attempt)
+    if result is None:
+        with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
+            stream.write('스테이징 갱신 결과 artifact가 없어 운영 미리보기를 건너뜁니다.\n')
+        return
+    recorded = validate_staging_result(root, result)
+    candidate = staging.execute(root, recorded['workflow_run_id'], recorded['workflow_run_attempt'],
+                                staging.Client(), validate_only=True)
+    require(candidate == recorded, 'BE artifact differs from published staging candidate')
+    command('git', 'merge-base', '--is-ancestor', candidate['source_sha'], 'origin/main', cwd=be)
+    rows = plan(root, be, candidate, candidate['image_digest'], None)
+    latest = current_staging_candidate()
+    require(latest == candidate, 'Cloud main staging candidate changed during preview')
+    if rows:
+        require_approval_environment()
+    lines = ['## 운영 승격 미리보기', '', '스테이징 배포 및 기능 검증은 아직 확인되지 않았습니다.',
+             f"후보: `{candidate['source_sha']}` / `{candidate['image_digest']}`", '',
+             '| 대상 | 변경 근거 |', '|---|---|']
+    for row in rows:
+        lines.append(f"| {row['target']} | " + ', '.join(row['paths']).replace('|', '\\|').replace('\n', ' ') + ' |')
+    if not rows:
+        lines.append('| 없음 | 운영 대상 변경 없음 |')
+    with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
+        stream.write('\n'.join(lines) + '\n')
+    return candidate, rows
+
+
+def plan_fingerprint(root, candidate, rows):
+    names = [BASELINE, values.RECORD, *values.VALUES,
+             *(f'apps/spring-value/{target}-prod.yaml' for target in TARGETS)]
+    files = {name: hashlib.sha256((root / name).read_bytes()).hexdigest() for name in names}
+    data = json.dumps({'candidate': candidate, 'rows': rows, 'files': files},
+                      sort_keys=True, separators=(',', ':'), ensure_ascii=True)
+    return hashlib.sha256(data.encode()).hexdigest()
+
+
+def create_promotion_pr(root, rows, candidate, evidence):
+    no_open_promotion()
+    update(root, rows, candidate)
+    remote = cloud_gh('api', f'repos/{CLOUD_REPO}/git/ref/heads/main')
+    require(json.loads(remote)['object']['sha'] == values.git(root, 'rev-parse', 'HEAD').decode().strip(),
+            'Cloud main moved; rerun preview and promotion')
+    run_id = os.environ.get('GITHUB_RUN_ID', 'manual')
+    attempt = os.environ.get('GITHUB_RUN_ATTEMPT', '1')
+    require(staging.positive(run_id) and staging.positive(attempt), 'Invalid promotion run ID')
+    branch = f'backend-production/{run_id}-{attempt}'
+    command('git', 'switch', '-c', branch, cwd=root)
+    command('git', 'config', 'user.name', 'github-actions[bot]', cwd=root)
+    command('git', 'config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com', cwd=root)
+    command('git', 'add', '--', *(r['file'] for r in rows), cwd=root)
+    command('git', 'commit', '-m', '배포: 검증한 BE 이미지 운영 승격 준비', cwd=root)
+    command('git', 'push', 'origin', f'HEAD:refs/heads/{branch}', cwd=root)
+    no_open_promotion()
+    return cloud_gh('pr', 'create', '--repo', CLOUD_REPO, '--base', 'main', '--head', branch,
+                    '--title', '[Deploy] BE 운영 승격 ' + candidate['source_sha'][:12],
+                    '--body', pr_body(rows, candidate, evidence)).strip()
+
+
+def request_auto_merge(pr_url):
+    # Protection API visibility is mandatory; uncertainty leaves the PR for review.
+    try:
+        repo = json.loads(cloud_gh('api', f'repos/{CLOUD_REPO}'))
+        protection = json.loads(cloud_gh('api', f'repos/{CLOUD_REPO}/branches/main/protection'))
+        checks = protection.get('required_status_checks') or {}
+        reviews = protection.get('required_pull_request_reviews') or {}
+        require(repo.get('allow_auto_merge') is True
+                and bool(checks.get('contexts') or checks.get('checks'))
+                and reviews.get('required_approving_review_count', 0) >= 1,
+                'Auto-merge or required checks/reviews are not configured')
+        cloud_gh('pr', 'merge', '--repo', CLOUD_REPO, '--auto', '--merge', pr_url)
+        return '필수 검사와 리뷰를 기다리는 자동 병합을 요청했습니다.'
+    except Exception:
+        return '자동 병합 설정·보호 규칙을 확인하지 못했거나 요청이 거절되어 리뷰 대기로 남겼습니다.'
+
+
+def auto_approved(root, be, expected):
+    require(re.fullmatch('[0-9a-f]{64}', expected or ''), 'Approved preview fingerprint missing')
+    require(not values.git(root, 'status', '--porcelain=v1', '--untracked-files=all', '--ignored=matching').strip(),
+            'Expected clean Cloud checkout')
+    result = auto_preview(root, be)
+    require(result is not None, 'Published staging result is missing')
+    candidate, rows = result
+    require(bool(rows) and plan_fingerprint(root, candidate, rows) == expected,
+            'Candidate, baseline, values or deployment plan changed after approval')
+    link = f"https://github.com/{CLOUD_REPO}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
+    evidence = ('담당자가 스테이징 기능 검증 후 GitHub Environment 승인을 진행하는 절차입니다. '
+                '구체적인 기능 검증 결과는 담당자가 별도 기록해야 합니다. 승인 실행: ' + link)
+    url = create_promotion_pr(root, rows, candidate, evidence)
+    require(re.fullmatch(r'https://github\.com/100-hours-a-week/KTB4-14th-Cloud/pull/[1-9][0-9]*', url),
+            'Unexpected PR URL')
+    message = request_auto_merge(url)
+    with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
+        stream.write(f'\n운영 승격 PR: {url}\n\n{message}\n')
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--be', required=True)
-    p.add_argument('--mode', choices=('preview', 'pr'), default='preview')
+    p.add_argument('--mode', choices=('preview', 'pr', 'auto-preview', 'auto-approved'), default='preview')
     args = p.parse_args()
     root = Path.cwd(); be = Path(args.be).resolve()
     try:
+        if args.mode == 'auto-preview':
+            require(os.environ.get('GITHUB_ACTIONS') == 'true', 'GitHub Actions required')
+            result = auto_preview(root, be)
+            with open(os.environ['GITHUB_OUTPUT'], 'a') as stream:
+                if result and result[1]:
+                    stream.write('has_targets=true\n')
+                    stream.write('fingerprint=' + plan_fingerprint(root, *result) + '\n')
+                else:
+                    stream.write('has_targets=false\n')
+            return 0
+        if args.mode == 'auto-approved':
+            require(os.environ.get('GITHUB_ACTIONS') == 'true', 'GitHub Actions required')
+            auto_approved(root, be, os.environ.get('APPROVED_FINGERPRINT', ''))
+            return 0
         require(os.environ.get('GITHUB_ACTIONS') == 'true' and os.environ.get('GITHUB_REF') == 'refs/heads/main',
                 'Dispatch the trusted workflow from main')
         c = staging.execute(root, os.environ.get('RUN_ID', ''), os.environ.get('RUN_ATTEMPT', ''), staging.Client(), validate_only=True)
@@ -200,23 +380,8 @@ def main():
             stream.write(body)
         if args.mode == 'preview' or not rows:
             return 0
-        no_open_promotion()
-        update(root, rows, c)
-        # Recheck Cloud main immediately before publication. Never rebase stale validated inputs.
-        remote = cloud_gh('api', 'repos/100-hours-a-week/KTB4-14th-Cloud/git/ref/heads/main')
-        require(json.loads(remote)['object']['sha'] == values.git(root, 'rev-parse', 'HEAD').decode().strip(),
-                'Cloud main moved; rerun preview and promotion')
-        branch = 'backend-production/pending'
-        command('git', 'switch', '-c', branch, cwd=root)
-        command('git', 'config', 'user.name', 'github-actions[bot]', cwd=root)
-        command('git', 'config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com', cwd=root)
-        command('git', 'add', '--', *(r['file'] for r in rows), cwd=root)
-        command('git', 'commit', '-m', '배포: 검증한 BE 이미지 운영 승격 준비', cwd=root)
-        command('git', 'push', 'origin', f'HEAD:refs/heads/{branch}', cwd=root)
-        no_open_promotion()
-        # gh takes multiline text as one argument, with no shell interpolation.
-        print(cloud_gh('pr', 'create', '--repo', '100-hours-a-week/KTB4-14th-Cloud', '--base', 'main',
-                       '--head', branch, '--title', '[Deploy] BE 운영 승격 ' + c['source_sha'][:12], '--body', body))
+        require_approval_environment()
+        print(create_promotion_pr(root, rows, c, evidence))
         return 0
     except Exception as exc:
         if isinstance(exc, (values.ValidationError, staging.IntegrationError)):

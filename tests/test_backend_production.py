@@ -78,6 +78,94 @@ class Promotion(unittest.TestCase):
     def plan(self, c):
         return production.plan(self.cloud, self.be, c, D2, 'Human fixture: both deployments and functional checks confirmed')
 
+    def auto_context(self, c):
+        remote = self.base / 'cloud.git'
+        subprocess.run(['git', 'clone', '--bare', '-q', str(self.cloud), str(remote)], check=True)
+        git(self.cloud, 'remote', 'add', 'origin', str(remote))
+        git(self.be, 'update-ref', 'refs/remotes/origin/main', c['source_sha'])
+        event = self.base / 'event.json'
+        event.write_text(json.dumps({'workflow_run': {'id': 25, 'run_attempt': 2,
+            'name': 'Update staging backend image', 'path': '.github/workflows/backend-staging.yml',
+            'head_branch': 'main', 'status': 'completed', 'conclusion': 'success',
+            'repository': {'full_name': production.CLOUD_REPO},
+            'head_repository': {'full_name': production.CLOUD_REPO}}}))
+        summary = self.base / 'summary'
+        env = {'GITHUB_EVENT_PATH': str(event), 'GITHUB_STEP_SUMMARY': str(summary),
+               'GITHUB_EVENT_NAME': 'workflow_run', 'GITHUB_REPOSITORY': production.CLOUD_REPO}
+        result = {'status': 'published', 'cloud_commit': git(self.cloud, 'rev-parse', 'HEAD'),
+                  **{k: c[k] for k in ('workflow_run_id', 'workflow_run_attempt', 'source_sha', 'image_digest')}}
+        return env, summary, result
+
+    def test_auto_preview_published_candidate(self):
+        c = self.setup_cloud(self.change('src/main/java/com/audigo/domain/chat/service/Chat.java'))
+        env, summary, result = self.auto_context(c)
+        with patch.dict(os.environ, env), patch.object(production, 'staging_result', return_value=result) as fetch, \
+                patch.object(production.staging, 'execute', return_value=c), \
+                patch.object(production, 'current_staging_candidate', return_value=c), \
+                patch.object(production, 'require_approval_environment'):
+            production.auto_preview(self.cloud, self.be)
+        fetch.assert_called_once_with('25', '2')
+        text = summary.read_text()
+        self.assertIn(c['source_sha'], text); self.assertIn(D2, text)
+        self.assertIn('chat-api', text); self.assertIn('Chat.java', text)
+        self.assertIn('아직 확인되지 않았습니다', text)
+
+    def test_auto_preview_skips_missing_artifact(self):
+        c = self.setup_cloud(self.change('build.gradle'))
+        env, summary, _ = self.auto_context(c)
+        with patch.dict(os.environ, env), patch.object(production, 'staging_result', return_value=None), \
+                patch.object(production.staging, 'execute', side_effect=AssertionError('must not validate')):
+            production.auto_preview(self.cloud, self.be)
+        self.assertIn('건너뜁니다', summary.read_text())
+
+    def test_auto_preview_rejects_replaced_candidate(self):
+        c = self.setup_cloud(self.change('build.gradle'))
+        env, _, result = self.auto_context(c)
+        c['image_digest'] = D1
+        (self.cloud / values.RECORD).write_text(json.dumps(c))
+        commit(self.cloud)
+        with patch.dict(os.environ, env), patch.object(production, 'staging_result', return_value=result), \
+                self.assertRaises(values.ValidationError):
+            production.auto_preview(self.cloud, self.be)
+
+    def test_approved_candidate_creates_pr(self):
+        c = self.setup_cloud(self.change('build.gradle'))
+        rows = production.plan(self.cloud, self.be, c, D2, None)
+        fingerprint = production.plan_fingerprint(self.cloud, c, rows)
+        url = 'https://github.com/100-hours-a-week/KTB4-14th-Cloud/pull/123'
+        env = {'GITHUB_STEP_SUMMARY': str(self.base / 'summary'), 'GITHUB_RUN_ID': '25'}
+        with patch.dict(os.environ, env), patch.object(production, 'auto_preview', return_value=(c, rows)), \
+                patch.object(production, 'create_promotion_pr', return_value=url) as create, \
+                patch.object(production, 'request_auto_merge', return_value='자동 병합 요청'):
+            production.auto_approved(self.cloud, self.be, fingerprint)
+        create.assert_called_once()
+        self.assertIn(url, (self.base / 'summary').read_text())
+
+    def test_approved_candidate_changed_is_blocked(self):
+        c = self.setup_cloud(self.change('build.gradle'))
+        rows = production.plan(self.cloud, self.be, c, D2, None)
+        fingerprint = production.plan_fingerprint(self.cloud, c, rows)
+        replacement = dict(c, image_digest=D1)
+        with patch.object(production, 'auto_preview', return_value=(replacement, rows)), \
+                patch.object(production, 'create_promotion_pr') as create, \
+                self.assertRaises(values.ValidationError):
+            production.auto_approved(self.cloud, self.be, fingerprint)
+        create.assert_not_called()
+
+    def test_auto_merge_unconfigured_leaves_pr(self):
+        c = self.setup_cloud(self.change('build.gradle'))
+        rows = production.plan(self.cloud, self.be, c, D2, None)
+        fingerprint = production.plan_fingerprint(self.cloud, c, rows)
+        url = 'https://github.com/100-hours-a-week/KTB4-14th-Cloud/pull/123'
+        env = {'GITHUB_STEP_SUMMARY': str(self.base / 'summary'), 'GITHUB_RUN_ID': '25'}
+        with patch.dict(os.environ, env), patch.object(production, 'auto_preview', return_value=(c, rows)), \
+                patch.object(production, 'create_promotion_pr', return_value=url), \
+                patch.object(production, 'cloud_gh', side_effect=[json.dumps({'allow_auto_merge': False}), json.dumps({})]) as gh:
+            production.auto_approved(self.cloud, self.be, fingerprint)
+        self.assertEqual(gh.call_count, 2)
+        self.assertIn(url, (self.base / 'summary').read_text())
+        self.assertIn('리뷰 대기', (self.base / 'summary').read_text())
+
     def test_chat_only_and_values_allowlist(self):
         new = self.change('src/main/java/com/audigo/domain/chat/service/ChatService.java')
         c = self.setup_cloud(new); rows = self.plan(c)

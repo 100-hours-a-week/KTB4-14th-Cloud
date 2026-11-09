@@ -79,7 +79,17 @@ jobs:
           ASKPASS
           chmod 700 "$auth_dir/askpass"
           GIT_ASKPASS="$auth_dir/askpass" GIT_TERMINAL_PROMPT=0 \
-            "$RUNNER_TEMP/staging-values-venv/bin/python" scripts/backend_staging.py
+            "$RUNNER_TEMP/staging-values-venv/bin/python" scripts/backend_staging.py | tee "$RUNNER_TEMP/staging-result.json"
+          "$RUNNER_TEMP/staging-values-venv/bin/python" -c 'import json, os; p=os.environ["RUNNER_TEMP"] + "/staging-result.json"; d=json.load(open(p)); print("published=" + str(d["status"] == "published").lower(), file=open(os.environ["GITHUB_OUTPUT"], "a"))'
+
+      # 실제 Git 반영이 이뤄진 실행만 승격에 전달할 기록을 보관합니다.
+      - name: Upload published staging result
+        if: steps.candidate.outputs.published == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: staging-backend-result-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/staging-result.json
+          if-no-files-found: error
 
       # 실패한 실행도 요약에 남깁니다. 실제 스테이징 Sync 결과는 별도로 확인합니다.
       - name: Record execution outcome
