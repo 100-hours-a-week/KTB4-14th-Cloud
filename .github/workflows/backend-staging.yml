@@ -1,5 +1,7 @@
 name: Update staging backend image
 
+# BE의 성공한 이미지 발행 알림 또는 담당자의 수동 실행을 받습니다.
+# run ID·attempt로 후보를 다시 검증하며, 입력만으로 이미지를 신뢰하지 않습니다.
 on:
   workflow_dispatch:
     inputs:
@@ -12,24 +14,30 @@ on:
         required: true
         type: string
 
+# 후보 반영을 직렬화하고 실행 중인 갱신은 취소하지 않습니다.
+# 대기 실행의 순서는 별도 Python 로직에서 확인해 오래된 후보의 덮어쓰기를 막습니다.
 concurrency:
   group: staging-backend-image-update
   cancel-in-progress: false
 
+# 기본 토큰은 읽기 전용이며, 스테이징 기록을 반영하는 job만 쓰기를 허용합니다.
 permissions:
   contents: read
 
 jobs:
   update:
+    # 이 쓰기 권한은 Cloud Git 반영용입니다. BE 조회에는 별도의 읽기 토큰을 사용합니다.
     permissions:
       contents: write
     runs-on: ubuntu-24.04
     env:
       RUN_ID: ${{ inputs.run_id }}
       RUN_ATTEMPT: ${{ inputs.run_attempt }}
+      # BE의 발행 run·artifact 조회용입니다. Cloud Push 자격증명과 분리합니다.
       GH_TOKEN: ${{ secrets.BE_READ_TOKEN }}
       PYTHONDONTWRITEBYTECODE: '1'
     steps:
+      # Cloud main을 기준으로 갱신하며, Git 인증 정보는 checkout에 남기지 않습니다.
       - name: Check out Cloud main
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -38,17 +46,23 @@ jobs:
           persist-credentials: false
           token: ${{ github.token }}
 
+      # 이미지를 빌드하지 않고 registry의 digest 및 ARM64 지원 여부를 확인합니다.
       - name: Set up Docker Buildx for registry inspection
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
+      # 임시 가상환경을 사용해 허용 파일 검사에 설치 파일이 섞이지 않도록 합니다.
       - name: Install staging YAML parser outside checkout
         run: |
           python3 -m venv "$RUNNER_TEMP/staging-values-venv"
           "$RUNNER_TEMP/staging-values-venv/bin/pip" install --no-cache-dir --no-deps -r scripts/requirements-staging-values.txt
 
+      # run/artifact/registry 검증 → 후보 순서 확인 → 두 values와 후보 기록 갱신 순서입니다.
+      # Python 로직은 충돌 시 최신 main에서 재검증하고 보호 규칙 거부 시 중단합니다.
+      # 이 단계의 성공은 Git 반영이며, 실제 Pod 배포·기능 검증 완료를 의미하지 않습니다.
       - name: Validate and publish staging candidate
         id: candidate
         env:
+          # Cloud Git Push에만 사용하고, 임시 askpass는 단계 종료 시 삭제합니다.
           CLOUD_GIT_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
@@ -67,6 +81,7 @@ jobs:
           GIT_ASKPASS="$auth_dir/askpass" GIT_TERMINAL_PROMPT=0 \
             "$RUNNER_TEMP/staging-values-venv/bin/python" scripts/backend_staging.py
 
+      # 실패한 실행도 요약에 남깁니다. 실제 스테이징 Sync 결과는 별도로 확인합니다.
       - name: Record execution outcome
         if: always()
         env:
