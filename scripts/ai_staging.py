@@ -65,7 +65,9 @@ def validate(candidate, repo):
     require(candidate['image_repository'] == repo and candidate['platform'] == 'linux/arm64', 'Candidate image/platform not allowed')
     require(re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,127}', candidate['image_tag']), 'Invalid image tag')
     require(all(POSITIVE.fullmatch(candidate[k]) for k in ('workflow_run_id', 'workflow_run_attempt')), 'Invalid run identifiers')
-    require(candidate['workflow_run_url'] == f"https://github.com/{SOURCE}/actions/runs/{candidate['workflow_run_id']}/attempts/{candidate['workflow_run_attempt']}", 'Invalid candidate run URL')
+    run_url = f"https://github.com/{SOURCE}/actions/runs/{candidate['workflow_run_id']}"
+    require(candidate['workflow_run_url'] in (run_url, f"{run_url}/attempts/{candidate['workflow_run_attempt']}"),
+            'Invalid candidate run URL')
     return candidate
 
 def candidate_zip(data, repo):
