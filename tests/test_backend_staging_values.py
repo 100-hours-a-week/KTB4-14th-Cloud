@@ -1,6 +1,7 @@
 import importlib.util
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -54,7 +55,10 @@ class ValuesTests(unittest.TestCase):
 
     def test_existing_tag_and_different_candidates(self):
         for index, name in enumerate(v.VALUES):
-            self.edit(name, lambda s: s.replace('  digest:', '  tag: sha-'+str(index)*40+'\n  digest:'))
+            def set_tag(text):
+                text = re.sub(r'^  tag:.*\n', '', text, flags=re.MULTILINE)
+                return text.replace('  digest:', '  tag: sha-'+str(index)*40+'\n  digest:')
+            self.edit(name, set_tag)
         self.commit()
         v.update(self.root, C); v.verify(self.root, C)
 
