@@ -17,7 +17,7 @@ import tempfile
 import unittest
 import zipfile
 import urllib.error
-from contextlib import redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 from unittest.mock import patch
 
 
@@ -197,10 +197,31 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(result["decision"], "first-registration")
         self.assertEqual(result["source_sha"], B)
         self.assertEqual(result["image_digest"], DIGEST)
+        self.assertEqual(result["workflow_run_id"], "123")
+        self.assertEqual(result["workflow_run_attempt"], "2")
+        self.assertEqual(result["cloud_commit"], self.head())
         changed = self.git("--git-dir", self.remote, "diff-tree", "--no-commit-id", "--name-only", "-r", "main").stdout.splitlines()
         self.assertEqual(sorted(changed), sorted([*values.VALUES, values.RECORD]))
         self.assertEqual(json.loads(self.remote_file(values.RECORD)), candidate())
         self.assertIn("tag: sha-" + B, self.remote_file(values.VALUES[0]))
+
+    def test_entrypoint_json_published_and_skipped(self):
+        env = {"GITHUB_ACTIONS": "true", "RUN_ID": "123", "RUN_ATTEMPT": "2"}
+        with patch.dict(os.environ, env), patch.object(staging, "Client", return_value=self.client), \
+                patch.object(staging.Path, "cwd", return_value=self.dev):
+            output = io.StringIO()
+            with redirect_stdout(output):
+                self.assertEqual(staging.main(), 0)
+            result = json.loads(output.getvalue())
+            self.assertEqual((result["status"], result["cloud_commit"]), ("published", self.head()))
+            self.assertEqual((result["workflow_run_id"], result["workflow_run_attempt"]), ("123", "2"))
+            self.assertEqual((result["source_sha"], result["image_digest"]), (B, DIGEST))
+            output = io.StringIO()
+            with redirect_stdout(output):
+                self.assertEqual(staging.main(), 0)
+            result = json.loads(output.getvalue())
+            self.assertEqual(result["status"], "unchanged")
+            self.assertNotIn("cloud_commit", result)
 
     def test_rejects_invalid_source_run_before_any_write(self):
         before = self.head()

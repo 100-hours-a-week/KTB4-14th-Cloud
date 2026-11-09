@@ -138,7 +138,8 @@ def execute(repo, run_id, attempt, client, temp_parent=None, *, validate_only=Fa
         return candidate
     result = retry.publish(Path(repo), candidate, api=client.api, temp_parent=temp_parent)
     return dict(result, source_sha=sha, image_digest=candidate['image_digest'],
-                image_repository=candidate['image_repository'], workflow_run_url=candidate['workflow_run_url'])
+                image_repository=candidate['image_repository'], workflow_run_url=candidate['workflow_run_url'],
+                workflow_run_id=run_id, workflow_run_attempt=attempt)
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
