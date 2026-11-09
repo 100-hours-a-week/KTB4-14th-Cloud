@@ -101,7 +101,8 @@ class Client:
         try: return load_json(result.stdout)
         except ValueError as exc: raise Error('ECR returned invalid JSON') from exc
     def registry(self, reference, field):
-        result = subprocess.run(['docker', 'buildx', 'imagetools', 'inspect', reference, '--format', '{{json .' + field + '}}'], capture_output=True, text=True)
+        options = ['--raw'] if field == 'Raw' else ['--format', '{{json .' + field + '}}']
+        result = subprocess.run(['docker', 'buildx', 'imagetools', 'inspect', reference, *options], capture_output=True, text=True)
         require(result.returncode == 0 and len(result.stdout) <= 1024 * 1024, 'Registry lookup failed')
         try: return load_json(result.stdout)
         except ValueError as exc: raise Error('Invalid registry response') from exc
@@ -129,14 +130,27 @@ def fetch_candidate(root, run_id, attempt, client):
 def validate_ecr(client, candidate):
     name = candidate['image_repository'].split('/', 1)[1]
     details = client.ecr('describe-images', '--repository-name', name, '--image-ids', f"imageDigest={candidate['image_digest']}").get('imageDetails')
-    require(isinstance(details, list) and len(details) == 1 and candidate['image_tag'] in details[0].get('imageTags', []), 'ECR digest and candidate tag do not identify the same image')
-    manifest = client.registry(candidate['image_repository'] + '@' + candidate['image_digest'], 'Manifest')
-    require(isinstance(manifest, dict) and manifest.get('schemaVersion') == 2 and manifest.get('digest') == candidate['image_digest'], 'Registry manifest digest mismatch')
+    require(isinstance(details, list) and len(details) == 1 and isinstance(details[0], dict), 'ECR output format error: expected one image detail')
+    require(details[0].get('imageDigest') == candidate['image_digest'], 'ECR image digest mismatch')
+    require(candidate['image_tag'] in details[0].get('imageTags', []), 'ECR image tag mismatch')
+    reference = candidate['image_repository'] + '@' + candidate['image_digest']
+    descriptor = client.registry(reference, 'Manifest')
+    # Buildx returns an OCI descriptor for a single image (no schemaVersion).
+    # Its index output also includes index fields; inspect raw JSON consistently.
+    require(isinstance(descriptor, dict) and isinstance(descriptor.get('digest'), str)
+            and DIGEST.fullmatch(descriptor['digest']), 'Registry output format error: invalid descriptor digest')
+    require(descriptor['digest'] == candidate['image_digest'], 'Registry manifest digest mismatch')
+    manifest = client.registry(reference, 'Raw')
+    require(isinstance(manifest, dict) and manifest.get('schemaVersion') == 2,
+            'Registry output format error: invalid raw manifest schemaVersion')
     kind = manifest.get('mediaType')
+    require(kind == descriptor.get('mediaType'), 'Registry output format error: descriptor/raw mediaType differ')
     if kind in ('application/vnd.oci.image.index.v1+json', 'application/vnd.docker.distribution.manifest.list.v2+json'):
         arm = [item for item in manifest.get('manifests', []) if isinstance(item, dict) and item.get('platform', {}).get('os') == 'linux' and item.get('platform', {}).get('architecture') == 'arm64']
         require(bool(arm), 'Registry image is missing linux/arm64 manifest')
-        image = client.registry(candidate['image_repository'] + '@' + arm[0].get('digest', ''), 'Image')
+        child = arm[0].get('digest')
+        require(isinstance(child, str) and DIGEST.fullmatch(child), 'Registry output format error: invalid ARM64 child digest')
+        image = client.registry(candidate['image_repository'] + '@' + child, 'Image')
     else:
         require(kind in ('application/vnd.oci.image.manifest.v1+json', 'application/vnd.docker.distribution.manifest.v2+json'), 'Unsupported registry manifest')
         image = client.registry(candidate['image_repository'] + '@' + candidate['image_digest'], 'Image')
