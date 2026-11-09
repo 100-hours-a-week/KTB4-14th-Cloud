@@ -1,1 +1,4 @@
 cfn-lint==1.57.2
+
+# 전체 unittest 실행에 필요한 BE GitOps YAML 파서
+-r ../scripts/requirements-staging-values.txt
