@@ -9,8 +9,9 @@ replicaCount: 1
 
 image:
   repository: mingkiboo/audigo-backend
-  digest: sha256:819d76834395ba8b921405fa1bf26880c1a18cafc8ff425cb6ca7e8741f15b17
+  digest: sha256:4266dd856251eae6e2a04b32786e8a78326e5012bce93da0beb309c588de8da7
 
+  tag: sha-f6dbcb95c7e89c95dd413e8851d039ea31a480bb
 containerPort: 8080
 
 resources:
@@ -51,7 +52,6 @@ configMap:
     AUDIGO_AI_RESULT_QUEUE_URL: "https://sqs.ap-northeast-2.amazonaws.com/185489190599/Audigo-AI-Result-Queue"
 
     MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "health,prometheus"
-    
     SERVER_TOMCAT_MBEANREGISTRY_ENABLED: "true"
 
 # 기존 ESO 리소스를 재사용하므로 차트에서 새로 생성하지 않음
