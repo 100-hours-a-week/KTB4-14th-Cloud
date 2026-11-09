@@ -23,9 +23,6 @@ spec:
       jsonPointers:
         - /spec/template/metadata/annotations/reloader.stakater.com~1last-reloaded-from
   syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
     syncOptions:
       - ServerSideApply=true
       - RespectIgnoreDifferences=true
