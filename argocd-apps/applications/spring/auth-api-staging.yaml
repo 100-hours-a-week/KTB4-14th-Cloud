@@ -23,8 +23,10 @@ spec:
       namespace: auth-staging
       jsonPointers:
         - /spec/template/metadata/annotations/reloader.stakater.com~1last-reloaded-from
-  # 최초 배포는 수동 Sync합니다.
   syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
     syncOptions:
       - ServerSideApply=true
       - RespectIgnoreDifferences=true
