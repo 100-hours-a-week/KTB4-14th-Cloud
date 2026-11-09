@@ -1,0 +1,2 @@
+# Pure Python round-trip parser; installed with --no-deps (no C extension required).
+ruamel.yaml==0.18.6

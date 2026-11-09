@@ -1,0 +1,100 @@
+name: Preview or propose backend production promotion
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Validated BE publish run ID
+        required: true
+        type: string
+      run_attempt:
+        description: Validated BE publish run attempt
+        required: true
+        type: string
+      digest:
+        description: Exact staging-tested sha256 digest
+        required: true
+        type: string
+      staging_evidence:
+        description: Verifier, time, both staging Deployment digests and functional checks
+        required: true
+        type: string
+      deployments_confirmed:
+        description: I verified both staging Deployments actually run this digest
+        required: true
+        default: false
+        type: boolean
+      mode:
+        description: Preview first; pr creates a proposal only
+        required: true
+        default: preview
+        type: choice
+        options:
+          - preview
+          - pr
+
+concurrency:
+  group: backend-production-promotion
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  promote:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - name: Checkout trusted Cloud main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          path: cloud
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Checkout full BE main history as data only
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: 100-hours-a-week/KTB4-14th-BE
+          ref: main
+          path: be
+          token: ${{ secrets.BE_READ_TOKEN }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Registry inspection
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Install existing YAML validation dependency outside checkout
+        working-directory: cloud
+        run: |
+          python3 -m venv "$RUNNER_TEMP/production-values-venv"
+          "$RUNNER_TEMP/production-values-venv/bin/pip" install --no-cache-dir --no-deps -r scripts/requirements-staging-values.txt
+      - name: Validate, preview and optionally propose production images
+        working-directory: cloud
+        env:
+          RUN_ID: ${{ inputs.run_id }}
+          RUN_ATTEMPT: ${{ inputs.run_attempt }}
+          CANDIDATE_DIGEST: ${{ inputs.digest }}
+          STAGING_EVIDENCE: ${{ inputs.staging_evidence }}
+          STAGING_DEPLOYMENTS_CONFIRMED: ${{ inputs.deployments_confirmed }}
+          PROMOTION_MODE: ${{ inputs.mode }}
+          GH_TOKEN: ${{ secrets.BE_READ_TOKEN }}
+          CLOUD_PR_TOKEN: ${{ inputs.mode == 'pr' && secrets.CLOUD_PR_TOKEN || '' }}
+        run: |
+          set -euo pipefail
+          auth_dir=$(mktemp -d "$RUNNER_TEMP/production-auth.XXXXXX")
+          trap 'rm -rf "$auth_dir"' EXIT
+          cat > "$auth_dir/askpass" <<'ASKPASS'
+          #!/bin/sh
+          case "$1" in
+            *Username*) printf '%s\n' x-access-token ;;
+            *Password*) printf '%s\n' "$CLOUD_PR_TOKEN" ;;
+            *) exit 1 ;;
+          esac
+          ASKPASS
+          chmod 700 "$auth_dir/askpass"
+          GIT_ASKPASS="$auth_dir/askpass" GIT_TERMINAL_PROMPT=0 \
+            "$RUNNER_TEMP/production-values-venv/bin/python" scripts/backend_production.py \
+            --be "$GITHUB_WORKSPACE/be" --mode "$PROMOTION_MODE"

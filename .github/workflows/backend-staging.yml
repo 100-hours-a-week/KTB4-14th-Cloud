@@ -1,0 +1,75 @@
+name: Update staging backend image
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: BE publish workflow run ID
+        required: true
+        type: string
+      run_attempt:
+        description: BE publish workflow run attempt
+        required: true
+        type: string
+
+concurrency:
+  group: staging-backend-image-update
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  update:
+    permissions:
+      contents: write
+    runs-on: ubuntu-24.04
+    env:
+      RUN_ID: ${{ inputs.run_id }}
+      RUN_ATTEMPT: ${{ inputs.run_attempt }}
+      GH_TOKEN: ${{ secrets.BE_READ_TOKEN }}
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - name: Check out Cloud main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+          token: ${{ github.token }}
+
+      - name: Set up Docker Buildx for registry inspection
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Install staging YAML parser outside checkout
+        run: |
+          python3 -m venv "$RUNNER_TEMP/staging-values-venv"
+          "$RUNNER_TEMP/staging-values-venv/bin/pip" install --no-cache-dir --no-deps -r scripts/requirements-staging-values.txt
+
+      - name: Validate and publish staging candidate
+        id: candidate
+        env:
+          CLOUD_GIT_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          export TMPDIR="$RUNNER_TEMP"
+          auth_dir=$(mktemp -d)
+          trap 'rm -rf "$auth_dir"' EXIT
+          cat > "$auth_dir/askpass" <<'ASKPASS'
+          #!/bin/sh
+          case "$1" in
+            *Username*) printf '%s\n' x-access-token ;;
+            *Password*) printf '%s\n' "$CLOUD_GIT_TOKEN" ;;
+            *) exit 1 ;;
+          esac
+          ASKPASS
+          chmod 700 "$auth_dir/askpass"
+          GIT_ASKPASS="$auth_dir/askpass" GIT_TERMINAL_PROMPT=0 \
+            "$RUNNER_TEMP/staging-values-venv/bin/python" scripts/backend_staging.py
+
+      - name: Record execution outcome
+        if: always()
+        env:
+          CANDIDATE_OUTCOME: ${{ steps.candidate.outcome }}
+        run: |
+          printf '\n- Candidate entry point outcome: `%s`\n' "$CANDIDATE_OUTCOME" >> "$GITHUB_STEP_SUMMARY"
