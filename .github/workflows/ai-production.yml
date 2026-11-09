@@ -1,0 +1,144 @@
+name: Preview AI Kubernetes production promotion
+
+# Staging result artifact binds one Cloud staging update to one promotion preview.
+# The generated PR is deliberately manual-merge; Argo CD production Sync is manual too.
+on:
+  workflow_run:
+    workflows: [Update staging AI image]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      staging_run_id:
+        description: Successful Cloud "Update staging AI image" run ID
+        required: true
+        type: string
+      staging_run_attempt:
+        description: Successful Cloud staging workflow attempt
+        required: true
+        type: string
+
+concurrency:
+  group: ai-production-promotion
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+
+jobs:
+  preview:
+    # workflow_run is additionally verified through the GitHub API in the script.
+    if: >-
+      (github.event_name == 'workflow_run' && github.repository == '100-hours-a-week/KTB4-14th-Cloud' &&
+       github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_repository.full_name == github.repository) ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      has_targets: ${{ steps.preview.outputs.has_targets }}
+      fingerprint: ${{ steps.preview.outputs.fingerprint }}
+      staging_run_id: ${{ steps.preview.outputs.staging_run_id }}
+      staging_run_attempt: ${{ steps.preview.outputs.staging_run_attempt }}
+    steps:
+      - name: Checkout trusted Cloud main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Configure AWS OIDC for ECR verification
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: ai-production-preview-${{ github.run_id }}
+      - name: Install YAML parser
+        run: |
+          python3 -m venv "$RUNNER_TEMP/ai-production-venv"
+          "$RUNNER_TEMP/ai-production-venv/bin/pip" install --no-cache-dir --no-deps -r scripts/requirements-staging-values.txt
+      - name: Set up Docker Buildx for manifest verification
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Authenticate Docker to ECR for manifest verification
+        run: |
+          registry=$("$RUNNER_TEMP/ai-production-venv/bin/python" -c 'from ruamel.yaml import YAML; print(YAML(typ="safe").load(open("apps/ai-values/values-ai-staging.yaml"))["image"]["repository"].split("/", 1)[0])')
+          aws ecr get-login-password | docker login --username AWS --password-stdin "$registry"
+      - name: Validate staging artifact and preview production targets
+        id: preview
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_EVENT_PATH: ${{ github.event_path }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          STAGING_RUN_ID: ${{ inputs.staging_run_id }}
+          STAGING_RUN_ATTEMPT: ${{ inputs.staging_run_attempt }}
+          CLOUD_READ_TOKEN: ${{ github.token }}
+          AI_READ_TOKEN: ${{ secrets.AI_READ_TOKEN }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          mode=manual-preview
+          if [ "$GITHUB_EVENT_NAME" = workflow_run ]; then mode=auto-preview; fi
+          "$RUNNER_TEMP/ai-production-venv/bin/python" scripts/ai_production.py --mode "$mode" | tee "$RUNNER_TEMP/ai-production-preview.out"
+          grep -E '^(has_targets|fingerprint|staging_run_id|staging_run_attempt)=' "$RUNNER_TEMP/ai-production-preview.out" >> "$GITHUB_OUTPUT" || true
+
+  approved-promotion:
+    needs: preview
+    if: needs.preview.outputs.has_targets == 'true'
+    environment: ai-production
+    # CLOUD_PR_TOKEN is exposed only after the required Environment reviewers approve.
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout latest Cloud main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Configure AWS OIDC for ECR revalidation
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: ai-production-approved-${{ github.run_id }}
+      - name: Install YAML parser
+        run: |
+          python3 -m venv "$RUNNER_TEMP/ai-production-venv"
+          "$RUNNER_TEMP/ai-production-venv/bin/pip" install --no-cache-dir --no-deps -r scripts/requirements-staging-values.txt
+      - name: Set up Docker Buildx for manifest verification
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Authenticate Docker to ECR for manifest verification
+        run: |
+          registry=$("$RUNNER_TEMP/ai-production-venv/bin/python" -c 'from ruamel.yaml import YAML; print(YAML(typ="safe").load(open("apps/ai-values/values-ai-staging.yaml"))["image"]["repository"].split("/", 1)[0])')
+          aws ecr get-login-password | docker login --username AWS --password-stdin "$registry"
+      - name: Revalidate approved snapshot and create manual-merge PR
+        env:
+          STAGING_RUN_ID: ${{ needs.preview.outputs.staging_run_id }}
+          STAGING_RUN_ATTEMPT: ${{ needs.preview.outputs.staging_run_attempt }}
+          APPROVED_FINGERPRINT: ${{ needs.preview.outputs.fingerprint }}
+          CLOUD_READ_TOKEN: ${{ github.token }}
+          CLOUD_PR_TOKEN: ${{ secrets.CLOUD_PR_TOKEN }}
+          AI_READ_TOKEN: ${{ secrets.AI_READ_TOKEN }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          set -euo pipefail
+          auth_dir=$(mktemp -d "$RUNNER_TEMP/ai-production-auth.XXXXXX")
+          trap 'rm -rf "$auth_dir"' EXIT
+          cat > "$auth_dir/askpass" <<'ASKPASS'
+          #!/bin/sh
+          case "$1" in
+            *Username*) printf '%s\n' x-access-token ;;
+            *Password*) printf '%s\n' "$CLOUD_PR_TOKEN" ;;
+            *) exit 1 ;;
+          esac
+          ASKPASS
+          chmod 700 "$auth_dir/askpass"
+          GIT_ASKPASS="$auth_dir/askpass" GIT_TERMINAL_PROMPT=0 \
+            "$RUNNER_TEMP/ai-production-venv/bin/python" scripts/ai_production.py --mode approved
