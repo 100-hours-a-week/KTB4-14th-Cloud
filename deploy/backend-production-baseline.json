@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "deployments": {
+    "auth-api": {
+      "source_sha": "447cc15f4034cff88174cc0ad33a6df94bc17d85",
+      "image_digest": "sha256:819d76834395ba8b921405fa1bf26880c1a18cafc8ff425cb6ca7e8741f15b17",
+      "confirmed_by": "김태남",
+      "confirmed_at": "2026-11-09T05:00:00Z",
+      "evidence": "김태남이 audigo-cp-1에서 운영 Pod 7개를 조회하여 모두 Ready=true, 삭제 진행 없음 및 지정 이미지 digest를 확인함. BE 버전 2.4.1의 SHA와 digest는 빌드 로그에서 확인함: https://github.com/100-hours-a-week/KTB4-14th-BE/actions/runs/42176952270/job/127757503199. 기능 테스트는 이번 확인 범위에 포함되지 않음."
+    },
+    "chat-api": {
+      "source_sha": "447cc15f4034cff88174cc0ad33a6df94bc17d85",
+      "image_digest": "sha256:819d76834395ba8b921405fa1bf26880c1a18cafc8ff425cb6ca7e8741f15b17",
+      "confirmed_by": "김태남",
+      "confirmed_at": "2026-11-09T05:00:00Z",
+      "evidence": "김태남이 audigo-cp-1에서 운영 Pod 7개를 조회하여 모두 Ready=true, 삭제 진행 없음 및 지정 이미지 digest를 확인함. BE 버전 2.4.1의 SHA와 digest는 빌드 로그에서 확인함: https://github.com/100-hours-a-week/KTB4-14th-BE/actions/runs/42176952270/job/127757503199. 기능 테스트는 이번 확인 범위에 포함되지 않음."
+    },
+    "chat-ws": {
+      "source_sha": "447cc15f4034cff88174cc0ad33a6df94bc17d85",
+      "image_digest": "sha256:819d76834395ba8b921405fa1bf26880c1a18cafc8ff425cb6ca7e8741f15b17",
+      "confirmed_by": "김태남",
+      "confirmed_at": "2026-11-09T05:00:00Z",
+      "evidence": "김태남이 audigo-cp-1에서 운영 Pod 7개를 조회하여 모두 Ready=true, 삭제 진행 없음 및 지정 이미지 digest를 확인함. BE 버전 2.4.1의 SHA와 digest는 빌드 로그에서 확인함: https://github.com/100-hours-a-week/KTB4-14th-BE/actions/runs/42176952270/job/127757503199. 기능 테스트는 이번 확인 범위에 포함되지 않음."
+    },
+    "travel-api": {
+      "source_sha": "447cc15f4034cff88174cc0ad33a6df94bc17d85",
+      "image_digest": "sha256:819d76834395ba8b921405fa1bf26880c1a18cafc8ff425cb6ca7e8741f15b17",
+      "confirmed_by": "김태남",
+      "confirmed_at": "2026-11-09T05:00:00Z",
+      "evidence": "김태남이 audigo-cp-1에서 운영 Pod 7개를 조회하여 모두 Ready=true, 삭제 진행 없음 및 지정 이미지 digest를 확인함. BE 버전 2.4.1의 SHA와 digest는 빌드 로그에서 확인함: https://github.com/100-hours-a-week/KTB4-14th-BE/actions/runs/42176952270/job/127757503199. 기능 테스트는 이번 확인 범위에 포함되지 않음."
+    },
+    "travel-worker": {
+      "source_sha": "447cc15f4034cff88174cc0ad33a6df94bc17d85",
+      "image_digest": "sha256:819d76834395ba8b921405fa1bf26880c1a18cafc8ff425cb6ca7e8741f15b17",
+      "confirmed_by": "김태남",
+      "confirmed_at": "2026-11-09T05:00:00Z",
+      "evidence": "김태남이 audigo-cp-1에서 운영 Pod 7개를 조회하여 모두 Ready=true, 삭제 진행 없음 및 지정 이미지 digest를 확인함. BE 버전 2.4.1의 SHA와 digest는 빌드 로그에서 확인함: https://github.com/100-hours-a-week/KTB4-14th-BE/actions/runs/42176952270/job/127757503199. 기능 테스트는 이번 확인 범위에 포함되지 않음."
+    },
+    "general-api": {
+      "source_sha": "447cc15f4034cff88174cc0ad33a6df94bc17d85",
+      "image_digest": "sha256:819d76834395ba8b921405fa1bf26880c1a18cafc8ff425cb6ca7e8741f15b17",
+      "confirmed_by": "김태남",
+      "confirmed_at": "2026-11-09T05:00:00Z",
+      "evidence": "김태남이 audigo-cp-1에서 운영 Pod 7개를 조회하여 모두 Ready=true, 삭제 진행 없음 및 지정 이미지 digest를 확인함. BE 버전 2.4.1의 SHA와 digest는 빌드 로그에서 확인함: https://github.com/100-hours-a-week/KTB4-14th-BE/actions/runs/42176952270/job/127757503199. 기능 테스트는 이번 확인 범위에 포함되지 않음."
+    },
+    "general-ws": {
+      "source_sha": "447cc15f4034cff88174cc0ad33a6df94bc17d85",
+      "image_digest": "sha256:819d76834395ba8b921405fa1bf26880c1a18cafc8ff425cb6ca7e8741f15b17",
+      "confirmed_by": "김태남",
+      "confirmed_at": "2026-11-09T05:00:00Z",
+      "evidence": "김태남이 audigo-cp-1에서 운영 Pod 7개를 조회하여 모두 Ready=true, 삭제 진행 없음 및 지정 이미지 digest를 확인함. BE 버전 2.4.1의 SHA와 digest는 빌드 로그에서 확인함: https://github.com/100-hours-a-week/KTB4-14th-BE/actions/runs/42176952270/job/127757503199. 기능 테스트는 이번 확인 범위에 포함되지 않음."
+    }
+  }
+}
