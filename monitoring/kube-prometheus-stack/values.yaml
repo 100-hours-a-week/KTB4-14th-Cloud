@@ -54,6 +54,11 @@ grafana:
     GOMEMLIMIT: "435MiB"
 
   sidecar:
+    resources:
+      requests:
+        memory: 96Mi
+      limits:
+        memory: 128Mi
     dashboards:
       enabled: true
     datasources:
