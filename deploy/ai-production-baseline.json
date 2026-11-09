@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "deployments": {
+    "match-ai": {
+      "source_sha": "1e9d94c962d08bac2c84f2f443a5bf47faf40400",
+      "image_digest": "sha256:4a3c8877590ea48cd0cdff788f3dda96942b3277767f0a262cb1e59637ea5a66",
+      "confirmed_by": "kim-tea-nam",
+      "confirmed_at": "2026-11-09T11:13:46Z",
+      "evidence": "ai-prod Pod Ready=true, 런타임 IMAGE_ID 일치, Argo CD Synced/Healthy, Cloud revision f0d641a26f0d70f70fb1226e1eb5e976bfa7255b. 운영 매칭 요청 정상 동작을 김태남이 확인. mockAI 빌드 run 41947646589에서 동일 digest 확인."
+    },
+    "travel-ai": {
+      "source_sha": "1e9d94c962d08bac2c84f2f443a5bf47faf40400",
+      "image_digest": "sha256:4a3c8877590ea48cd0cdff788f3dda96942b3277767f0a262cb1e59637ea5a66",
+      "confirmed_by": "kim-tea-nam",
+      "confirmed_at": "2026-11-09T11:13:46Z",
+      "evidence": "ai-prod Pod Ready=true, 런타임 IMAGE_ID 일치, Argo CD Synced/Healthy, Cloud revision f0d641a26f0d70f70fb1226e1eb5e976bfa7255b. 운영 여행 일정 생성 후 추천 일정 화면 표시 확인. mockAI 빌드 run 41947646589에서 동일 digest 확인."
+    },
+    "travel-ai-worker": {
+      "source_sha": "1e9d94c962d08bac2c84f2f443a5bf47faf40400",
+      "image_digest": "sha256:4a3c8877590ea48cd0cdff788f3dda96942b3277767f0a262cb1e59637ea5a66",
+      "confirmed_by": "kim-tea-nam",
+      "confirmed_at": "2026-11-09T11:13:46Z",
+      "evidence": "ai-prod Pod Ready=true, 런타임 IMAGE_ID 일치, Argo CD Synced/Healthy, Cloud revision f0d641a26f0d70f70fb1226e1eb5e976bfa7255b. 운영 generation_job_id=2217, travel_plan_id=2208, status=COMPLETED, error_message=null 확인. mockAI 빌드 run 41947646589에서 동일 digest 확인."
+    }
+  }
+}
