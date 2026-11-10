@@ -18,14 +18,6 @@ on:
         description: Cloud main에 병합된 운영 승격 PR 번호를 입력하세요.
         required: true
         type: string
-      observations:
-        description: 운영 환경에서 수집한 Argo CD·Kubernetes 상태 JSON을 붙여넣으세요.
-        required: true
-        type: string
-      functional_evidence:
-        description: 운영 배포 후 직접 확인한 기능과 결과를 입력하세요.
-        required: true
-        type: string
 
 # A retry must see the prior PR and never race another baseline proposal for the
 # same family. It does not cancel an in-progress verification.
@@ -110,8 +102,6 @@ jobs:
     env:
       SERVICE: ${{ inputs.service }}
       PROMOTION_PR: ${{ inputs.promotion_pr }}
-      OBSERVATIONS: ${{ inputs.observations }}
-      FUNCTIONAL_EVIDENCE: ${{ inputs.functional_evidence }}
       CLOUD_READ_TOKEN: ${{ github.token }}
       PYTHONDONTWRITEBYTECODE: '1'
     steps:
@@ -127,9 +117,9 @@ jobs:
           python3 -m venv "$RUNNER_TEMP/production-baseline-venv"
           "$RUNNER_TEMP/production-baseline-venv/bin/pip" install --no-cache-dir --no-deps -r scripts/requirements-staging-values.txt
 
-      # The script rechecks merged PR, values, observations, and an existing
+      # The script rechecks merged PR, values, and any existing
       # baseline PR immediately before it writes its one-file proposal.
-      - name: Validate post-Sync evidence and create or reuse baseline PR
+      - name: 승격 PR과 운영 values를 확인하고 기준선 PR 생성
         env:
           CLOUD_PR_TOKEN: ${{ secrets.CLOUD_PR_TOKEN }}
         run: |
