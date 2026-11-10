@@ -7,6 +7,8 @@ resources:
 
 nodeSelector:
   audigo.kr/node-pool: worker
+
+affinity:
   # 레플리카끼리 같은 노드에 몰리지 않도록 분산 배치 - 선호
   podAntiAffinity:
     preferredDuringSchedulingIgnoredDuringExecution:
