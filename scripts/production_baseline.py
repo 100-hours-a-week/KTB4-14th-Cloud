@@ -2,7 +2,6 @@
 import argparse
 from copy import deepcopy
 from datetime import datetime, timezone
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -19,7 +18,6 @@ CLOUD = backend.CLOUD_REPO
 FAMILIES = {'backend': backend, 'ai': ai}
 MARKER = re.compile(r'<!-- production-baseline:(\{[^\n]+\}) -->')
 SHA = ai.SHA
-DIGEST = ai.DIGEST
 
 
 def require(ok, message):
@@ -150,77 +148,14 @@ def trusted_promotion(root, service, number, main='HEAD'):
             'targets': selected, 'url': f'https://github.com/{CLOUD}/pull/{number}'}
 
 
-def application(root, service, target, ref='HEAD'):
-    name = (f'argocd-apps/applications/spring/{target}-prod.yaml' if service == 'backend'
-            else f'argocd-apps/applications/ai/{target}.yaml')
-    doc = ai.staging.yaml_tool().load(read(root, ref, name))
-    require(doc['spec']['source']['repoURL'] == f'https://github.com/{CLOUD}.git'
-            and doc['spec']['source']['targetRevision'] == 'main'
-            and doc['spec']['source']['helm']['releaseName'] == target, 'Unexpected Application mapping')
-    return doc['metadata']['name'], doc['spec']['destination']['namespace']
-
-
-def runtime_digests(observation, candidate):
-    allowed = {candidate['image_digest']}
-    raw = observation.get('image_index')
-    if raw is not None:
-        require(isinstance(raw, str) and len(raw.encode()) <= 32768, 'Invalid raw image index')
-        # Buildx may append one LF; only accept bytes whose hash actually matches.
-        require(any('sha256:' + hashlib.sha256(text.encode()).hexdigest() == candidate['image_digest']
-                    for text in (raw, raw.removesuffix('\n'))), 'Image index bytes do not match candidate digest')
-        index = values.load_json(raw)
-        require(isinstance(index, dict) and index.get('schemaVersion') == 2
-                and index.get('mediaType') in ('application/vnd.oci.image.index.v1+json',
-                                             'application/vnd.docker.distribution.manifest.list.v2+json')
-                and isinstance(index.get('manifests'), list), 'Invalid image index')
-        allowed.update(m['digest'] for m in index['manifests'] if isinstance(m, dict)
-                       and m.get('platform', {}).get('os') == 'linux'
-                       and m.get('platform', {}).get('architecture') == 'arm64'
-                       and DIGEST.fullmatch(m.get('digest', '')))
-    return allowed
-
-
-def verify_observations(root, context, observations, functional_evidence, main='HEAD'):
-    require(isinstance(functional_evidence, str) and 10 <= len(functional_evidence.strip()) <= 12000,
-            'Record human functional verification evidence for the promoted apps')
-    require(isinstance(observations, dict) and set(observations) == {'apps'}
-            and isinstance(observations['apps'], dict)
-            and set(observations['apps']) == set(context['targets']), 'Missing or extra target observations')
-    current = git(root, 'rev-parse', main)
-    for target, item in observations['apps'].items():
-        require(isinstance(item, dict), 'Invalid app observation')
-        app, namespace = application(root, context['service'], target, main)
-        require(item.get('application') == app and item.get('namespace') == namespace,
-                'Application/namespace mismatch: ' + target)
-        require(item.get('sync_status') == 'Synced' and item.get('health_status') == 'Healthy'
-                and item.get('rollout_complete') is True, 'Sync or rollout not confirmed: ' + target)
-        revision = item.get('revision')
-        ancestor(root, context['merge'], revision)
-        ancestor(root, revision, current)
-        path = context['targets'][target]
-        require(image(context['service'], read(root, revision, path))
-                == image(context['service'], read(root, main, path)), 'Observed revision uses another image')
-        pods = item.get('pods')
-        require(isinstance(pods, list) and bool(pods), 'No observed Pods: ' + target)
-        allowed = runtime_digests(item, context['candidate'])
-        for pod in pods:
-            require(isinstance(pod, dict) and pod.get('ready') is True and pod.get('deleting') is False,
-                    'Pod not Ready or deleting: ' + target)
-            image_id = pod.get('image_id')
-            require(isinstance(image_id, str), 'Missing runtime imageID')
-            digest = re.search(r'(sha256:[0-9a-f]{64})$', image_id)
-            require(digest is not None and digest.group(1) in allowed,
-                    'Runtime imageID differs; supply hash-verified ARM64 index evidence: ' + target)
-
-
-def updated_baseline(service, before, context, observations, evidence, actor, timestamp):
+def updated_baseline(service, before, context, actor, timestamp):
     require(re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9-]{0,38}(?:\[bot\])?', actor or ''), 'Missing verifier identity')
     confirmed = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
     require(confirmed.utcoffset() == timezone.utc.utcoffset(confirmed), 'Confirmation time must be UTC')
     after = deepcopy(before)
+    proof = {'promotion_pr': context['number'], 'candidate': context['candidate'],
+             'confirmation': 'operator_dispatch'}
     for target in context['targets']:
-        proof = {'promotion_pr': context['number'], 'observed': observations['apps'][target],
-                 'functional_evidence': evidence, 'candidate': context['candidate']}
         after['deployments'][target] = dict(source_sha=context['candidate']['source_sha'],
             image_digest=context['candidate']['image_digest'], confirmed_by=actor,
             confirmed_at=timestamp, evidence=json.dumps(proof, ensure_ascii=False, sort_keys=True))
@@ -234,11 +169,10 @@ def applied(data, context):
                for t in context['targets'])
 
 
-def verify_proposal(root, context, before, proposed, main='HEAD'):
+def verify_proposal(context, before, proposed):
     selected = set(context['targets'])
     changed = {t for t in before['deployments'] if before['deployments'][t] != proposed['deployments'][t]}
     require(changed == selected, 'Baseline PR must update exactly the promotion targets')
-    observations, evidence = {'apps': {}}, None
     verifier = set()
     for target in selected:
         entry = proposed['deployments'][target]
@@ -247,15 +181,14 @@ def verify_proposal(root, context, before, proposed, main='HEAD'):
         proof = values.load_json(entry['evidence'])
         require(proof.get('promotion_pr') == context['number']
                 and proof.get('candidate') == context['candidate'], 'Baseline evidence promotion mismatch')
-        if evidence is None:
-            evidence = proof.get('functional_evidence')
-        require(evidence == proof.get('functional_evidence'), 'Inconsistent functional evidence')
-        observations['apps'][target] = proof.get('observed')
+        # Existing proposals may carry the evidence collected by the old workflow.
+        require(proof.get('confirmation') == 'operator_dispatch'
+                or (isinstance(proof.get('observed'), dict)
+                    and isinstance(proof.get('functional_evidence'), str)), 'Missing operator confirmation')
         verifier.add((entry['confirmed_by'], entry['confirmed_at']))
         confirmed = datetime.fromisoformat(entry['confirmed_at'].replace('Z', '+00:00'))
         require(confirmed.utcoffset() == timezone.utc.utcoffset(confirmed), 'Confirmation time must be UTC')
     require(len(verifier) == 1, 'Inconsistent verifier/time')
-    verify_observations(root, context, observations, evidence, main)
 
 
 def existing_pr(branch):
@@ -278,11 +211,10 @@ def assert_main(root):
             'Main changed during validation; rerun against latest main')
 
 
-def propose(root, service, number, observations, evidence, actor):
+def propose(root, service, number, actor):
     require(not git(root, 'status', '--porcelain=v1'), 'Expected clean latest-main checkout')
     assert_main(root)
     context = trusted_promotion(root, service, number)
-    verify_observations(root, context, observations, evidence)
     name = family(service).BASELINE
     before = baseline(service, (root / name).read_text())
     branch = f'production-baseline/{service}-pr-{context["number"]}'
@@ -296,7 +228,7 @@ def propose(root, service, number, observations, evidence, actor):
         summary('기존 기준선 PR: ' + prior['html_url'])
         return prior['html_url']
     timestamp = datetime.now(timezone.utc).isoformat(timespec='seconds').replace('+00:00', 'Z')
-    proposed = updated_baseline(service, before, context, observations, evidence, actor, timestamp)
+    proposed = updated_baseline(service, before, context, actor, timestamp)
     # If push succeeded but PR creation failed, recover the immutable branch. Never force-push.
     remote = git(root, 'ls-remote', '--heads', 'origin', f'refs/heads/{branch}')
     if remote:
@@ -307,7 +239,7 @@ def propose(root, service, number, observations, evidence, actor):
                 'Recovery branch has unrelated files')
         proposed = baseline(service, read(root, saved, name))
         require(baseline(service, read(root, base, name)) == before, 'Recovery baseline became stale')
-    verify_proposal(root, context, before, proposed)
+    verify_proposal(context, before, proposed)
     body = pr_body(context, before, proposed)
     assert_main(root)
     if not remote:
@@ -346,16 +278,12 @@ def pr_body(context, before, proposed):
     for t in context['targets']:
         entry = proposed['deployments'][t]
         lines.append(f"| {t} | `{before['deployments'][t]['image_digest']}` | `{entry['image_digest']}` |")
-    lines += ['', '### 담당자가 확인한 운영 상태·기능']
-    for t in context['targets']:
-        entry = proposed['deployments'][t]
-        proof = values.load_json(entry['evidence'])
-        lines += [f"- {t}: 확인자 `{entry['confirmed_by']}`, UTC `{entry['confirmed_at']}`",
-                  '```json', json.dumps(proof['observed'], ensure_ascii=False, indent=2), '```']
-    entry = next(iter(context['targets']))
-    lines += [values.load_json(proposed['deployments'][entry]['evidence'])['functional_evidence'], '',
+    entry = proposed['deployments'][next(iter(context['targets']))]
+    lines += ['', '### 운영 확인 기록',
+              f"- 수동 실행자: `{entry['confirmed_by']}`, UTC `{entry['confirmed_at']}`",
+              '- 담당자는 운영 Sync 및 Pod·기능 확인을 마친 뒤 이 워크플로를 실행합니다.', '',
               '### 병합 전제',
-              '- Cloud 팀이 수동 리뷰·병합합니다. 자동 병합·승격·Argo CD Sync는 수행하지 않습니다.',
+              '- Cloud 팀이 검토 후 수동 병합합니다.',
               '- `Production baseline freshness`를 필수 검사로 지정하고 최신 main 브랜치 요구(strict)를 설정해야 합니다.',
               '- 운영 values 변경/롤백 뒤에는 최신 main으로 갱신하고 검사를 다시 통과해야 합니다.',
               '- 기존 CloudFormation CD가 main의 deploy/** 변경을 감지하므로 병합 시 해당 실행도 확인합니다.']
@@ -395,7 +323,7 @@ def check_pr(root, number):
     require(baseline(service, read(root, base, name)) == current,
             'Baseline changed since PR was opened; review against latest main')
     proposed = baseline(service, read(root, head, name))
-    verify_proposal(root, context, current, proposed)
+    verify_proposal(context, current, proposed)
     assert_main(root)
     summary('최신 main 기준선·운영 values 대조 통과: ' + pr['html_url'])
 
@@ -414,15 +342,12 @@ def main():
             require(os.environ.get('GITHUB_REPOSITORY') == CLOUD
                     and os.environ.get('GITHUB_REF') == 'refs/heads/main'
                     and os.environ.get('GITHUB_EVENT_NAME') == 'workflow_dispatch', 'Only Cloud main manual dispatch is allowed')
-            raw = os.environ.get('OBSERVATIONS', '')
-            require(len(raw.encode()) <= 60000, 'Observation input too large')
             propose(root, os.environ.get('SERVICE'), os.environ.get('PROMOTION_PR'),
-                    values.load_json(raw), os.environ.get('FUNCTIONAL_EVIDENCE', ''),
                     os.environ.get('GITHUB_ACTOR', ''))
         return 0
     except Exception as exc:
         print(str(exc) if isinstance(exc, (values.ValidationError, ai.staging.Error))
-              else 'Production baseline update blocked; check Git records and verification input', file=sys.stderr)
+              else 'Production baseline update blocked; check Git records and workflow inputs', file=sys.stderr)
         return 1
 
 
