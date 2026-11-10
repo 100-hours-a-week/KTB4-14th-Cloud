@@ -15,15 +15,7 @@ on:
         type: choice
         options: [backend, ai]
       promotion_pr:
-        description: Merged Cloud production-promotion PR number
-        required: true
-        type: string
-      observations:
-        description: JSON collected by the operator from Argo CD and Kubernetes
-        required: true
-        type: string
-      functional_evidence:
-        description: Verifier's functional-test evidence; do not claim unchecked tests
+        description: 운영 Sync와 검증을 마친 Cloud 운영 승격 PR 번호
         required: true
         type: string
 
@@ -110,8 +102,6 @@ jobs:
     env:
       SERVICE: ${{ inputs.service }}
       PROMOTION_PR: ${{ inputs.promotion_pr }}
-      OBSERVATIONS: ${{ inputs.observations }}
-      FUNCTIONAL_EVIDENCE: ${{ inputs.functional_evidence }}
       CLOUD_READ_TOKEN: ${{ github.token }}
       PYTHONDONTWRITEBYTECODE: '1'
     steps:
@@ -127,9 +117,9 @@ jobs:
           python3 -m venv "$RUNNER_TEMP/production-baseline-venv"
           "$RUNNER_TEMP/production-baseline-venv/bin/pip" install --no-cache-dir --no-deps -r scripts/requirements-staging-values.txt
 
-      # The script rechecks merged PR, values, observations, and an existing
+      # The script rechecks merged PR, values, and any existing
       # baseline PR immediately before it writes its one-file proposal.
-      - name: Validate post-Sync evidence and create or reuse baseline PR
+      - name: 승격 PR과 운영 values를 확인하고 기준선 PR 생성
         env:
           CLOUD_PR_TOKEN: ${{ secrets.CLOUD_PR_TOKEN }}
         run: |

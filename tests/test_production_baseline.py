@@ -82,10 +82,6 @@ class ProductionBaselineTests(unittest.TestCase):
         paths.add(record)
         if service == 'ai':
             paths.add(ai.STAGING_VALUES)
-        # check_pr also verifies the real Application mapping from main.
-        for target in chosen:
-            paths.add((f'argocd-apps/applications/spring/{target}-prod.yaml' if service == 'backend'
-                       else f'argocd-apps/applications/ai/{target}.yaml'))
         for name in paths:
             destination = self.root / name
             destination.parent.mkdir(parents=True, exist_ok=True)
@@ -161,102 +157,64 @@ class ProductionBaselineTests(unittest.TestCase):
             raise AssertionError('unexpected API path: ' + path)
         return fake
 
-    def observations(self, context):
-        return {'apps': {target: {
-            'application': target, 'namespace': target + '-prod',
-            'sync_status': 'Synced', 'health_status': 'Healthy', 'rollout_complete': True,
-            'revision': '3' * 40,
-            'pods': [{'ready': True, 'deleting': False, 'image_id': 'repo@' + DIGEST}],
-        } for target in context['targets']}}
-
     def test_normal_backend_and_ai_updates_only_selected_entries(self):
         for service in ('backend', 'ai'):
             with self.subTest(service=service):
                 before = self.source_baseline(service)
                 context = self.context(service)
-                observed = self.observations(context)
-                after = baseline.updated_baseline(service, before, context, observed,
-                    '담당자가 운영 상태와 기능을 확인했습니다.', 'reviewer', '2026-11-10T00:00:00Z')
+                after = baseline.updated_baseline(service, before, context, 'reviewer', '2026-11-10T00:00:00Z')
                 self.assertEqual(set(after['deployments']), set(before['deployments']))
                 for target in context['targets']:
                     self.assertEqual(after['deployments'][target]['source_sha'], SHA)
                     self.assertEqual(after['deployments'][target]['image_digest'], DIGEST)
                     proof = values.load_json(after['deployments'][target]['evidence'])
                     self.assertEqual(proof['promotion_pr'], context['number'])
+                    self.assertEqual(proof['confirmation'], 'operator_dispatch')
 
-    def test_backend_subset_changes_only_observed_target(self):
+    def test_backend_subset_changes_only_promoted_target(self):
         before = self.source_baseline('backend')
         context = self.context('backend', {'auth-api'})
-        after = baseline.updated_baseline('backend', before, context, self.observations(context),
-            '담당자가 auth-api 운영 기능을 확인했습니다.', 'reviewer', '2026-11-10T00:00:00Z')
+        after = baseline.updated_baseline('backend', before, context, 'reviewer', '2026-11-10T00:00:00Z')
         changed = {target for target in before['deployments']
                    if before['deployments'][target] != after['deployments'][target]}
         self.assertEqual(changed, {'auth-api'})
 
-    def test_missing_observation_and_runtime_digest_are_rejected(self):
+    def test_verify_proposal_requires_confirmation(self):
+        before = self.source_baseline('ai')
         context = self.context('ai', {'match-ai'})
-        with self.assertRaises(values.ValidationError):
-            baseline.verify_observations(self.root, context, {'apps': {}}, 'functional proof')
-        bad = self.observations(context)
-        bad['apps']['match-ai']['pods'][0]['image_id'] = 'repo@sha256:' + 'b' * 64
-        with patch.object(baseline, 'application', return_value=('match-ai', 'match-ai-prod')), \
-                patch.object(baseline, 'git', return_value='4' * 40), \
-                patch.object(baseline, 'ancestor'), \
-                patch.object(baseline, 'read', return_value='image:\n  repository: example\n  digest: ' + DIGEST + '\n'):
-            with self.assertRaises(values.ValidationError):
-                baseline.verify_observations(self.root, context, bad, 'functional proof')
-
-    def test_index_maps_platform_digest_only_when_raw_bytes_match_candidate(self):
-        raw = json.dumps({'schemaVersion': 2,
-            'mediaType': 'application/vnd.oci.image.index.v1+json',
-            'manifests': [{'digest': 'sha256:' + 'c' * 64,
-                           'platform': {'os': 'linux', 'architecture': 'arm64'}}]}, separators=(',', ':'))
-        candidate = {'image_digest': 'sha256:' + __import__('hashlib').sha256(raw.encode()).hexdigest()}
-        self.assertIn('sha256:' + 'c' * 64, baseline.runtime_digests({'image_index': raw}, candidate))
-        with self.assertRaises(values.ValidationError):
-            baseline.runtime_digests({'image_index': raw}, {'image_digest': DIGEST})
-
-    def test_rollback_or_stale_values_are_rejected_by_observation_comparison(self):
-        context = self.context('ai', {'match-ai'})
-        observed = self.observations(context)
-        old = 'image:\n  repository: example\n  digest: sha256:' + 'b' * 64 + '\n'
-        new = 'image:\n  repository: example\n  digest: ' + DIGEST + '\n'
-        with patch.object(baseline, 'application', return_value=('match-ai', 'match-ai-prod')), \
-                patch.object(baseline, 'git', side_effect=['4' * 40]), \
-                patch.object(baseline, 'ancestor'), \
-                patch.object(baseline, 'read', side_effect=[old, new]):
-            with self.assertRaises(values.ValidationError):
-                baseline.verify_observations(self.root, context, observed, 'functional proof')
+        proposed = baseline.updated_baseline('ai', before, context, 'reviewer', '2026-11-10T00:00:00Z')
+        entry = proposed['deployments']['match-ai']
+        proof = values.load_json(entry['evidence'])
+        del proof['confirmation']
+        entry['evidence'] = json.dumps(proof)
+        with self.assertRaisesRegex(values.ValidationError, 'Missing operator confirmation'):
+            baseline.verify_proposal(context, before, proposed)
 
     def test_applied_and_repeat_open_pr_are_idempotent(self):
         context = self.context('ai', {'match-ai'})
         before = self.source_baseline('ai')
-        proposed = baseline.updated_baseline('ai', before, context, self.observations(context),
-            '담당자가 운영 기능을 확인했습니다.', 'reviewer', '2026-11-10T00:00:00Z')
+        proposed = baseline.updated_baseline('ai', before, context, 'reviewer', '2026-11-10T00:00:00Z')
         self.assertTrue(baseline.applied(proposed, context))
         self.assertFalse(baseline.applied(before, context))
 
     def test_verify_proposal_rejects_extra_target_change(self):
         before = self.source_baseline('ai')
         context = self.context('ai', {'match-ai'})
-        proposed = baseline.updated_baseline('ai', before, context, self.observations(context),
-            '담당자가 운영 기능을 확인했습니다.', 'reviewer', '2026-11-10T00:00:00Z')
+        proposed = baseline.updated_baseline('ai', before, context, 'reviewer', '2026-11-10T00:00:00Z')
         proposed['deployments']['travel-ai']['source_sha'] = SHA
         with self.assertRaises(values.ValidationError):
-            baseline.verify_proposal(self.root, context, before, proposed)
+            baseline.verify_proposal(context, before, proposed)
 
     def test_propose_creates_one_json_pr_and_repeat_returns_open_link(self):
         remote = self.production_checkout()
         context = self.context('backend', {'auth-api'})
-        observed = self.observations(context)
         url = 'https://example.invalid/pull/101'
         main_sha = subprocess.check_output(['git', '-C', str(self.root), 'rev-parse', 'origin/main']).decode().strip()
         with patch.object(baseline, 'assert_main'), patch.object(baseline, 'trusted_promotion', return_value=context), \
-                patch.object(baseline, 'verify_observations'), patch.object(baseline, 'verify_proposal'), \
                 patch.object(baseline, 'existing_pr', side_effect=[None, None]), \
                 patch.object(baseline, 'api', return_value={'object': {'sha': main_sha}}), \
                 patch.object(baseline, 'gh', return_value=url):
-            self.assertEqual(baseline.propose(self.root, 'backend', '83', observed, 'functional proof', 'reviewer'), url)
+            self.assertEqual(baseline.propose(self.root, 'backend', '83', 'reviewer'), url)
         branch = 'refs/heads/production-baseline/backend-pr-83'
         saved = subprocess.check_output(['git', '--git-dir', str(remote), 'rev-parse', branch]).decode().strip()
         changed = subprocess.check_output(['git', '--git-dir', str(remote), 'diff-tree', '--no-commit-id', '--name-only', '-r', saved]).decode().splitlines()
@@ -264,36 +222,30 @@ class ProductionBaselineTests(unittest.TestCase):
         retry = self.clone_main(remote, 'retry')
         existing = {'state': 'open', 'html_url': url, 'number': 101}
         with patch.object(baseline, 'assert_main'), patch.object(baseline, 'trusted_promotion', return_value=context), \
-                patch.object(baseline, 'verify_observations'), patch.object(baseline, 'check_pr') as check, \
+                patch.object(baseline, 'check_pr') as check, \
                 patch.object(baseline, 'existing_pr', return_value=existing):
-            self.assertEqual(baseline.propose(retry, 'backend', '83', observed, 'functional proof', 'reviewer'), url)
+            self.assertEqual(baseline.propose(retry, 'backend', '83', 'reviewer'), url)
         check.assert_called_once_with(retry, 101)
 
     def test_retry_after_push_recovers_branch_without_second_commit(self):
         remote = self.production_checkout()
         context = self.context('backend', {'auth-api'})
-        observed = self.observations(context)
-        common = dict(assert_main=patch.object(baseline, 'assert_main'),
-                      trusted=patch.object(baseline, 'trusted_promotion', return_value=context),
-                      observed=patch.object(baseline, 'verify_observations'),
-                      proposal=patch.object(baseline, 'verify_proposal'))
         main_sha = subprocess.check_output(['git', '-C', str(self.root), 'rev-parse', 'origin/main']).decode().strip()
-        with common['assert_main'], common['trusted'], common['observed'], common['proposal'], \
+        with patch.object(baseline, 'assert_main'), patch.object(baseline, 'trusted_promotion', return_value=context), \
                 patch.object(baseline, 'existing_pr', side_effect=[None, None]), \
                 patch.object(baseline, 'api', return_value={'object': {'sha': main_sha}}), \
                 patch.object(baseline, 'gh', side_effect=values.ValidationError('PR API unavailable')):
             with self.assertRaises(values.ValidationError):
-                baseline.propose(self.root, 'backend', '83', observed, 'functional proof', 'reviewer')
+                baseline.propose(self.root, 'backend', '83', 'reviewer')
         ref = 'refs/heads/production-baseline/backend-pr-83'
         first = subprocess.check_output(['git', '--git-dir', str(remote), 'rev-parse', ref]).decode().strip()
         retry = self.clone_main(remote, 'recovery')
         retry_main = subprocess.check_output(['git', '-C', str(retry), 'rev-parse', 'origin/main']).decode().strip()
         with patch.object(baseline, 'assert_main'), patch.object(baseline, 'trusted_promotion', return_value=context), \
-                patch.object(baseline, 'verify_observations'), patch.object(baseline, 'verify_proposal'), \
                 patch.object(baseline, 'existing_pr', side_effect=[None, None]), \
                 patch.object(baseline, 'api', return_value={'object': {'sha': retry_main}}), \
                 patch.object(baseline, 'gh', return_value='https://example.invalid/pull/102'):
-            baseline.propose(retry, 'backend', '83', observed, 'functional proof', 'reviewer')
+            baseline.propose(retry, 'backend', '83', 'reviewer')
         second = subprocess.check_output(['git', '--git-dir', str(remote), 'rev-parse', ref]).decode().strip()
         self.assertEqual(first, second)
 
@@ -322,13 +274,8 @@ class ProductionBaselineTests(unittest.TestCase):
         with patch.object(baseline, 'api', side_effect=self.promotion_api('backend', 83, before, head)):
             context = baseline.trusted_promotion(self.root, 'backend', '83')
         target = 'auth-api'
-        app, namespace = baseline.application(self.root, 'backend', target)
-        observations = {'apps': {target: {'application': app, 'namespace': namespace,
-            'sync_status': 'Synced', 'health_status': 'Healthy', 'rollout_complete': True, 'revision': head,
-            'pods': [{'ready': True, 'deleting': False, 'image_id': 'repo@' + candidate['image_digest']}]}}}
         current = baseline.baseline('backend', (self.root / backend.BASELINE).read_text())
-        proposed = baseline.updated_baseline('backend', current, context, observations,
-            '담당자가 운영 인증 기능을 확인했습니다.', 'reviewer', '2026-11-10T00:00:00Z')
+        proposed = baseline.updated_baseline('backend', current, context, 'reviewer', '2026-11-10T00:00:00Z')
         subprocess.run(['git', '-C', str(self.root), 'switch', '-q', '-c', 'production-baseline/backend-pr-83'], check=True)
         (self.root / backend.BASELINE).write_text(json.dumps(proposed, ensure_ascii=False, indent=2) + '\n')
         subprocess.run(['git', '-C', str(self.root), 'add', backend.BASELINE], check=True)
