@@ -1,10 +1,10 @@
-name: Update staging AI image
+name: AI 스테이징 이미지 갱신
 
 on:
   workflow_dispatch:
     inputs:
-      run_id: {description: mockAI AI Image CD run ID, required: true, type: string}
-      run_attempt: {description: mockAI AI Image CD run attempt, required: true, type: string}
+      run_id: {description: mockAI 이미지 발행 실행 ID를 입력하세요., required: true, type: string}
+      run_attempt: {description: mockAI 이미지 발행 실행의 재시도 번호를 입력하세요., required: true, type: string}
 
 concurrency:
   group: staging-ai-image-update
@@ -29,17 +29,17 @@ jobs:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
           role-session-name: ai-staging-${{ github.run_id }}
-      - name: Install YAML parser
+      - name: YAML 파서 설치
         run: |
           python3 -m venv "$RUNNER_TEMP/ai-staging-venv"
           "$RUNNER_TEMP/ai-staging-venv/bin/pip" install --no-cache-dir --no-deps -r scripts/requirements-staging-values.txt
-      - name: Set up Docker Buildx for manifest verification
+      - name: 이미지 매니페스트 검증용 Docker Buildx 설정
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-      - name: Authenticate Docker to ECR for manifest verification
+      - name: 이미지 매니페스트 검증용 ECR 로그인
         run: |
           registry=$("$RUNNER_TEMP/ai-staging-venv/bin/python" -c 'from ruamel.yaml import YAML; print(YAML(typ="safe").load(open("apps/ai-values/values-ai-staging.yaml"))["image"]["repository"].split("/", 1)[0])')
           aws ecr get-login-password | docker login --username AWS --password-stdin "$registry"
-      - name: Validate and publish AI staging candidate
+      - name: AI 스테이징 후보 검증 및 Git 반영
         id: candidate
         env:
           CLOUD_GIT_TOKEN: ${{ github.token }}
@@ -58,7 +58,7 @@ jobs:
           chmod 700 "$auth_dir/askpass"
           GIT_ASKPASS="$auth_dir/askpass" GIT_TERMINAL_PROMPT=0 "$RUNNER_TEMP/ai-staging-venv/bin/python" scripts/ai_staging.py | tee "$RUNNER_TEMP/ai-staging-result.json"
           "$RUNNER_TEMP/ai-staging-venv/bin/python" -c 'import json, os; d=json.load(open(os.environ["RUNNER_TEMP"] + "/ai-staging-result.json")); print("published=" + str(d["status"] == "published").lower(), file=open(os.environ["GITHUB_OUTPUT"], "a"))'
-      - name: Upload published AI staging result
+      - name: Git에 반영한 AI 스테이징 결과 artifact 저장
         if: steps.candidate.outputs.published == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:

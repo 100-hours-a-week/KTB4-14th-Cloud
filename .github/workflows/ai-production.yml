@@ -1,20 +1,20 @@
-name: Preview AI Kubernetes production promotion
+name: AI Kubernetes 운영 승격 미리보기
 
 # Staging result artifact binds one Cloud staging update to one promotion preview.
 # The generated PR is deliberately manual-merge; Argo CD production Sync is manual too.
 on:
   workflow_run:
-    workflows: [Update staging AI image]
+    workflows: [Update staging AI image, AI 스테이징 이미지 갱신]
     types: [completed]
     branches: [main]
   workflow_dispatch:
     inputs:
       staging_run_id:
-        description: Successful Cloud "Update staging AI image" run ID
+        description: 성공한 Cloud AI 스테이징 이미지 갱신 실행 ID를 입력하세요.
         required: true
         type: string
       staging_run_attempt:
-        description: Successful Cloud staging workflow attempt
+        description: 성공한 Cloud 스테이징 실행의 재시도 번호를 입력하세요.
         required: true
         type: string
 
@@ -43,29 +43,29 @@ jobs:
       staging_run_id: ${{ steps.preview.outputs.staging_run_id }}
       staging_run_attempt: ${{ steps.preview.outputs.staging_run_attempt }}
     steps:
-      - name: Checkout trusted Cloud main
+      - name: 검증 대상 Cloud main 체크아웃
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
           fetch-depth: 0
           persist-credentials: false
-      - name: Configure AWS OIDC for ECR verification
+      - name: ECR 검증용 AWS OIDC 인증
         uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
           role-session-name: ai-production-preview-${{ github.run_id }}
-      - name: Install YAML parser
+      - name: YAML 파서 설치
         run: |
           python3 -m venv "$RUNNER_TEMP/ai-production-venv"
           "$RUNNER_TEMP/ai-production-venv/bin/pip" install --no-cache-dir --no-deps -r scripts/requirements-staging-values.txt
-      - name: Set up Docker Buildx for manifest verification
+      - name: 이미지 매니페스트 검증용 Docker Buildx 설정
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-      - name: Authenticate Docker to ECR for manifest verification
+      - name: 이미지 매니페스트 검증용 ECR 로그인
         run: |
           registry=$("$RUNNER_TEMP/ai-production-venv/bin/python" -c 'from ruamel.yaml import YAML; print(YAML(typ="safe").load(open("apps/ai-values/values-ai-staging.yaml"))["image"]["repository"].split("/", 1)[0])')
           aws ecr get-login-password | docker login --username AWS --password-stdin "$registry"
-      - name: Validate staging artifact and preview production targets
+      - name: 스테이징 artifact 검증 및 운영 대상 미리보기
         id: preview
         env:
           GITHUB_EVENT_NAME: ${{ github.event_name }}
@@ -95,29 +95,29 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - name: Checkout latest Cloud main
+      - name: 최신 Cloud main 체크아웃
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
           fetch-depth: 0
           persist-credentials: false
-      - name: Configure AWS OIDC for ECR revalidation
+      - name: ECR 재검증용 AWS OIDC 인증
         uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
           role-session-name: ai-production-approved-${{ github.run_id }}
-      - name: Install YAML parser
+      - name: YAML 파서 설치
         run: |
           python3 -m venv "$RUNNER_TEMP/ai-production-venv"
           "$RUNNER_TEMP/ai-production-venv/bin/pip" install --no-cache-dir --no-deps -r scripts/requirements-staging-values.txt
-      - name: Set up Docker Buildx for manifest verification
+      - name: 이미지 매니페스트 검증용 Docker Buildx 설정
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-      - name: Authenticate Docker to ECR for manifest verification
+      - name: 이미지 매니페스트 검증용 ECR 로그인
         run: |
           registry=$("$RUNNER_TEMP/ai-production-venv/bin/python" -c 'from ruamel.yaml import YAML; print(YAML(typ="safe").load(open("apps/ai-values/values-ai-staging.yaml"))["image"]["repository"].split("/", 1)[0])')
           aws ecr get-login-password | docker login --username AWS --password-stdin "$registry"
-      - name: Revalidate approved snapshot and create manual-merge PR
+      - name: 승인된 후보 재검증 및 수동 병합 PR 생성
         env:
           STAGING_RUN_ID: ${{ needs.preview.outputs.staging_run_id }}
           STAGING_RUN_ATTEMPT: ${{ needs.preview.outputs.staging_run_attempt }}

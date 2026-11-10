@@ -205,6 +205,10 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(json.loads(self.remote_file(values.RECORD)), candidate())
         self.assertIn("tag: sha-" + B, self.remote_file(values.VALUES[0]))
 
+    def test_korean_publish_name_updates_staging(self):
+        self.client.run["name"] = "BE 이미지 발행"
+        self.assertEqual(self.execute()["status"], "published")
+
     def test_entrypoint_json_published_and_skipped(self):
         env = {"GITHUB_ACTIONS": "true", "RUN_ID": "123", "RUN_ATTEMPT": "2"}
         with patch.dict(os.environ, env), patch.object(staging, "Client", return_value=self.client), \

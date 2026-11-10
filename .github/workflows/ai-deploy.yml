@@ -1,4 +1,4 @@
-name: AI Worker Production Deploy
+name: AI Worker 운영 ECS 배포
 
 # Release PR이 main에 병합되면 Release 파일에 지정된 이미지를 재빌드 없이 배포한다.
 #
@@ -39,7 +39,7 @@ jobs:
       DRAIN_TIMEOUT_MINUTES: ${{ vars.AI_DRAIN_TIMEOUT_MINUTES || '150' }}
 
     steps:
-      - name: Checkout
+      - name: 저장소 체크아웃
         uses: actions/checkout@v7
         with:
           persist-credentials: false

@@ -1,4 +1,4 @@
-name: AI Release PR Verify
+name: AI 릴리스 PR 검증
 
 # Release PR(chore/release-* → main)의 Release 파일이 실제 ECR 이미지를 가리키는지 검증한다.
 on:
@@ -27,7 +27,7 @@ jobs:
           echo "::error::Release PR은 chore/release-* 브랜치에서만 생성할 수 있습니다. (현재: ${{ github.head_ref }})"
           exit 1
 
-      - name: Checkout
+      - name: 저장소 체크아웃
         uses: actions/checkout@v7
         with:
           persist-credentials: false
