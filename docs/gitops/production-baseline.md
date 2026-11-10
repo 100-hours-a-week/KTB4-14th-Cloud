@@ -2,12 +2,12 @@
 
 운영 승격 PR을 Cloud `main`에 병합하고 Argo CD에서 수동 Sync한다. 담당자는
 대상 앱의 롤아웃 완료, Pod Ready, 실제 실행 이미지 및 주요 기능을 확인한 뒤
-**Update production baseline**을 실행한다. 수동 실행 자체를 담당자의 확인으로
+**운영 배포 기준선 갱신**을 실행한다. 수동 실행 자체를 담당자의 확인으로
 기록하며, Actions는 병합된 승격 PR과 Git의 운영 이미지를 검증한다.
 
 ## 실행 방법
 
-Cloud 저장소 **Actions → Update production baseline → Run workflow**에서
+Cloud 저장소 **Actions → 운영 배포 기준선 갱신 → Run workflow**에서
 브랜치를 `main`으로 두고 다음 값을 입력한다.
 
 | 입력 | 값 |

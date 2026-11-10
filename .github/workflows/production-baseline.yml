@@ -1,4 +1,4 @@
-name: Update production baseline
+name: 운영 배포 기준선 갱신
 
 # This workflow records a deployment that a responsible operator has already
 # synced and verified. It never contacts a Kubernetes or Argo CD endpoint.
@@ -10,12 +10,12 @@ on:
   workflow_dispatch:
     inputs:
       service:
-        description: Promotion family whose post-Sync baseline is being recorded
+        description: 기준선을 갱신할 서비스를 선택하세요.
         required: true
         type: choice
         options: [backend, ai]
       promotion_pr:
-        description: 운영 Sync와 검증을 마친 Cloud 운영 승격 PR 번호
+        description: Cloud main에 병합된 운영 승격 PR 번호를 입력하세요.
         required: true
         type: string
 
