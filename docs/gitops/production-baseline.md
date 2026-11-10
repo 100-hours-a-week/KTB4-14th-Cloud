@@ -28,7 +28,7 @@ Worker 큐 소비 같은 기능 검증은 담당자가 수행하고 결과를
 
 ## workflow_dispatch 입력
 
-`Update production baseline`은 Cloud 저장소 `main`에서만 실행한다.
+`운영 배포 기준선 갱신`은 Cloud 저장소 `main`에서만 실행한다.
 
 - `service`: `backend` 또는 `ai`
 - `promotion_pr`: 실제로 병합된 동일 Cloud 저장소 운영 승격 PR 번호
