@@ -5,18 +5,8 @@ resources:
     cpu: 100m
     memory: 200Mi
 
-affinity:
-  nodeAffinity:
-    requiredDuringSchedulingIgnoredDuringExecution:
-      nodeSelectorTerms:
-        - matchExpressions:
-            - key: kubernetes.io/hostname
-              operator: In
-              values:
-                - audigo-worker-1
-                - audigo-worker-2
-                - audigo-worker-3
-
+nodeSelector:
+  audigo.kr/node-pool: worker
   # 레플리카끼리 같은 노드에 몰리지 않도록 분산 배치 - 선호
   podAntiAffinity:
     preferredDuringSchedulingIgnoredDuringExecution:

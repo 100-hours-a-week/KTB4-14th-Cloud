@@ -76,7 +76,8 @@ lifecycle:
   # 종료 전 대기 시간(초). ALB가 대상에서 이 Pod를 빼는 동안 들어온 요청을 처리. terminationGracePeriodSeconds보다 작아야 함.
   preStopSleepSeconds: 15
 
-workerNodeHostnames: [audigo-worker-1, audigo-worker-2, audigo-worker-3]
+nodeSelector:
+  audigo.kr/node-pool: worker
 tolerations: []
 
 service:
