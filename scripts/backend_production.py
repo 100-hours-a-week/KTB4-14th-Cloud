@@ -249,7 +249,7 @@ def auto_preview(root, be):
     run = event['workflow_run']
     require(os.environ.get('GITHUB_EVENT_NAME') == 'workflow_run'
             and os.environ.get('GITHUB_REPOSITORY') == CLOUD_REPO
-            and run.get('name') == 'Update staging backend image'
+            and run.get('name') in ('Update staging backend image', 'BE 스테이징 이미지 갱신')
             and run.get('path') == '.github/workflows/backend-staging.yml'
             and run.get('head_branch') == 'main' and run.get('status') == 'completed'
             and run.get('conclusion') == 'success'

@@ -110,6 +110,18 @@ class Promotion(unittest.TestCase):
         self.assertIn('chat-api', text); self.assertIn('Chat.java', text)
         self.assertIn('아직 확인되지 않았습니다', text)
 
+    def test_auto_preview_accepts_korean_staging_name(self):
+        c = self.setup_cloud(self.change('build.gradle'))
+        env, summary, _ = self.auto_context(c)
+        event = Path(env['GITHUB_EVENT_PATH'])
+        payload = json.loads(event.read_text())
+        payload['workflow_run']['name'] = 'BE 스테이징 이미지 갱신'
+        event.write_text(json.dumps(payload))
+        with patch.dict(os.environ, env), patch.object(production, 'staging_result', return_value=None) as fetch:
+            production.auto_preview(self.cloud, self.be)
+        fetch.assert_called_once_with('25', '2')
+        self.assertIn('건너뜁니다', summary.read_text())
+
     def test_auto_preview_skips_missing_artifact(self):
         c = self.setup_cloud(self.change('build.gradle'))
         env, summary, _ = self.auto_context(c)

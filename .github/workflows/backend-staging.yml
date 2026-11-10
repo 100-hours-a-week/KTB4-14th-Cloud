@@ -1,4 +1,4 @@
-name: Update staging backend image
+name: BE 스테이징 이미지 갱신
 
 # BE의 성공한 이미지 발행 알림 또는 담당자의 수동 실행을 받습니다.
 # run ID·attempt로 후보를 다시 검증하며, 입력만으로 이미지를 신뢰하지 않습니다.
@@ -6,11 +6,11 @@ on:
   workflow_dispatch:
     inputs:
       run_id:
-        description: BE publish workflow run ID
+        description: BE 이미지 발행 실행 ID를 입력하세요.
         required: true
         type: string
       run_attempt:
-        description: BE publish workflow run attempt
+        description: BE 이미지 발행 실행의 재시도 번호를 입력하세요.
         required: true
         type: string
 
@@ -38,7 +38,7 @@ jobs:
       PYTHONDONTWRITEBYTECODE: '1'
     steps:
       # Cloud main을 기준으로 갱신하며, Git 인증 정보는 checkout에 남기지 않습니다.
-      - name: Check out Cloud main
+      - name: Cloud main 체크아웃
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
@@ -47,11 +47,11 @@ jobs:
           token: ${{ github.token }}
 
       # 이미지를 빌드하지 않고 registry의 digest 및 ARM64 지원 여부를 확인합니다.
-      - name: Set up Docker Buildx for registry inspection
+      - name: 레지스트리 검사용 Docker Buildx 설정
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       # 임시 가상환경을 사용해 허용 파일 검사에 설치 파일이 섞이지 않도록 합니다.
-      - name: Install staging YAML parser outside checkout
+      - name: 작업 트리 밖에 스테이징 YAML 파서 설치
         run: |
           python3 -m venv "$RUNNER_TEMP/staging-values-venv"
           "$RUNNER_TEMP/staging-values-venv/bin/pip" install --no-cache-dir --no-deps -r scripts/requirements-staging-values.txt
@@ -59,7 +59,7 @@ jobs:
       # run/artifact/registry 검증 → 후보 순서 확인 → 두 values와 후보 기록 갱신 순서입니다.
       # Python 로직은 충돌 시 최신 main에서 재검증하고 보호 규칙 거부 시 중단합니다.
       # 이 단계의 성공은 Git 반영이며, 실제 Pod 배포·기능 검증 완료를 의미하지 않습니다.
-      - name: Validate and publish staging candidate
+      - name: 스테이징 후보 검증 및 Git 반영
         id: candidate
         env:
           # Cloud Git Push에만 사용하고, 임시 askpass는 단계 종료 시 삭제합니다.
@@ -83,7 +83,7 @@ jobs:
           "$RUNNER_TEMP/staging-values-venv/bin/python" -c 'import json, os; p=os.environ["RUNNER_TEMP"] + "/staging-result.json"; d=json.load(open(p)); print("published=" + str(d["status"] == "published").lower(), file=open(os.environ["GITHUB_OUTPUT"], "a"))'
 
       # 실제 Git 반영이 이뤄진 실행만 승격에 전달할 기록을 보관합니다.
-      - name: Upload published staging result
+      - name: Git에 반영한 스테이징 결과 artifact 저장
         if: steps.candidate.outputs.published == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -92,9 +92,9 @@ jobs:
           if-no-files-found: error
 
       # 실패한 실행도 요약에 남깁니다. 실제 스테이징 Sync 결과는 별도로 확인합니다.
-      - name: Record execution outcome
+      - name: 실행 결과 기록
         if: always()
         env:
           CANDIDATE_OUTCOME: ${{ steps.candidate.outcome }}
         run: |
-          printf '\n- Candidate entry point outcome: `%s`\n' "$CANDIDATE_OUTCOME" >> "$GITHUB_STEP_SUMMARY"
+          printf '\n- 후보 처리 결과: `%s`\n' "$CANDIDATE_OUTCOME" >> "$GITHUB_STEP_SUMMARY"

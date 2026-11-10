@@ -45,7 +45,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Install YAML parser and test baseline logic
+      - name: YAML 파서 설치 및 기준선 로직 테스트
         env:
           PYTHONDONTWRITEBYTECODE: '1'
         run: |
@@ -71,7 +71,7 @@ jobs:
           # Only the job's read-only GITHUB_TOKEN is persisted for PR-ref fetches.
           # No PR branch code or Cloud write token is used in this job.
           persist-credentials: true
-      - name: Detect baseline change without executing PR code
+      - name: PR 코드 실행 없이 기준선 변경 확인
         id: baseline
         env:
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -82,10 +82,10 @@ jobs:
           if grep -Eq '^deploy/(backend|ai)-production-baseline\.json$' "$RUNNER_TEMP/pr-files.txt"; then
             echo 'changed=true' >> "$GITHUB_OUTPUT"
           fi
-      - name: Install YAML parser
+      - name: YAML 파서 설치
         if: steps.baseline.outputs.changed == 'true'
         run: python -m pip install --no-deps -r scripts/requirements-staging-values.txt
-      - name: Check baseline against latest main and merged promotion
+      - name: 최신 main·병합된 승격 PR과 기준선 대조
         if: steps.baseline.outputs.changed == 'true'
         env:
           CLOUD_READ_TOKEN: ${{ github.token }}
@@ -105,14 +105,14 @@ jobs:
       CLOUD_READ_TOKEN: ${{ github.token }}
       PYTHONDONTWRITEBYTECODE: '1'
     steps:
-      - name: Checkout latest trusted Cloud main
+      - name: 최신 검증 대상 Cloud main 체크아웃
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Install baseline validation dependency
+      - name: 기준선 검증 의존성 설치
         run: |
           python3 -m venv "$RUNNER_TEMP/production-baseline-venv"
           "$RUNNER_TEMP/production-baseline-venv/bin/pip" install --no-cache-dir --no-deps -r scripts/requirements-staging-values.txt

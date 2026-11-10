@@ -3,7 +3,7 @@
 `ai-production.yml`은 성공한 Cloud 스테이징 갱신 결과 artifact를 다시
 검증한 뒤 운영 후보를 미리보기합니다. `workflow_dispatch`는 이미 검증한
 Cloud 스테이징 run ID와 attempt를 지정할 때만 사용합니다. 두 경로 모두
-`Update staging AI image`의 성공한 `main` 실행과
+`AI 스테이징 이미지 갱신`의 성공한 `main` 실행과
 `staging-ai-result-<cloud-run-id>-<attempt>` artifact를 대조합니다.
 
 ## 운영 기준선

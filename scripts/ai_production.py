@@ -19,7 +19,8 @@ import ai_staging as staging
 
 CLOUD_REPO = '100-hours-a-week/KTB4-14th-Cloud'
 STAGING_WORKFLOW = '.github/workflows/ai-staging.yml'
-STAGING_WORKFLOW_NAME = 'Update staging AI image'
+STAGING_WORKFLOW_NAME = 'AI 스테이징 이미지 갱신'
+STAGING_WORKFLOW_NAMES = frozenset((STAGING_WORKFLOW_NAME, 'Update staging AI image'))
 RECORD = 'apps/ai-values/staging-ai-candidate.json'
 STAGING_VALUES = 'apps/ai-values/values-ai-staging.yaml'
 BASELINE = 'deploy/ai-production-baseline.json'
@@ -149,7 +150,7 @@ def trusted_staging_run(run_id, attempt):
     run = staging.load_json(cloud_api(f'repos/{CLOUD_REPO}/actions/runs/{run_id}/attempts/{attempt}'))
     require(workflow.get('path') == STAGING_WORKFLOW and isinstance(workflow.get('id'), int)
             and run.get('workflow_id') == workflow['id'] and run.get('path') == STAGING_WORKFLOW
-            and run.get('name') == STAGING_WORKFLOW_NAME and str(run.get('id')) == run_id
+            and run.get('name') in STAGING_WORKFLOW_NAMES and str(run.get('id')) == run_id
             and str(run.get('run_attempt')) == attempt and run.get('event') == 'workflow_dispatch'
             and run.get('head_branch') == 'main' and run.get('status') == 'completed'
             and run.get('conclusion') == 'success'
@@ -297,7 +298,7 @@ def ids_for_mode(mode):
         event = staging.load_json(Path(os.environ['GITHUB_EVENT_PATH']).read_text())
         run = event.get('workflow_run', {})
         require(os.environ.get('GITHUB_EVENT_NAME') == 'workflow_run' and os.environ.get('GITHUB_REPOSITORY') == CLOUD_REPO
-                and run.get('name') == STAGING_WORKFLOW_NAME and run.get('path') == STAGING_WORKFLOW
+                and run.get('name') in STAGING_WORKFLOW_NAMES and run.get('path') == STAGING_WORKFLOW
                 and run.get('head_branch') == 'main' and run.get('conclusion') == 'success'
                 and run.get('repository', {}).get('full_name') == CLOUD_REPO
                 and run.get('head_repository', {}).get('full_name') == CLOUD_REPO, 'Untrusted staging workflow event')

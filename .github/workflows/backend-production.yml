@@ -1,38 +1,38 @@
-name: Preview or propose backend production promotion
+name: BE 운영 승격 미리보기 및 PR 생성
 
 # 운영 승격은 사람이 검증한 후보를 지정해 수동 실행합니다.
 # preview는 대상·근거만 출력하고, pr은 Git 변경 제안까지만 생성합니다.
 on:
   workflow_run:
-    workflows: [Update staging backend image]
+    workflows: [Update staging backend image, BE 스테이징 이미지 갱신]
     types: [completed]
     branches: [main]
   workflow_dispatch:
     inputs:
       run_id:
-        description: Validated BE publish run ID
+        description: 검증한 BE 이미지 발행 실행 ID를 입력하세요.
         required: true
         type: string
       run_attempt:
-        description: Validated BE publish run attempt
+        description: 검증한 BE 이미지 발행 실행의 재시도 번호를 입력하세요.
         required: true
         type: string
       digest:
-        description: Exact staging-tested sha256 digest
+        description: 스테이징에서 검증한 이미지의 정확한 sha256 digest를 입력하세요.
         required: true
         type: string
       # 후보 기록은 Git 상태이므로, 실제 두 스테이징 Deployment의 확인 근거를 따로 받습니다.
       staging_evidence:
-        description: Verifier, time, both staging Deployment digests and functional checks
+        description: 확인자·시각·스테이징 Deployment 두 개의 digest와 기능 검증 결과를 입력하세요.
         required: true
         type: string
       deployments_confirmed:
-        description: I verified both staging Deployments actually run this digest
+        description: 스테이징 Deployment 두 개가 이 digest로 실행 중임을 확인했습니다.
         required: true
         default: false
         type: boolean
       mode:
-        description: Preview first; pr creates a proposal only
+        description: preview로 먼저 확인하세요. pr은 운영 변경 PR만 생성합니다.
         required: true
         default: preview
         type: choice
@@ -66,14 +66,14 @@ jobs:
       has_targets: ${{ steps.preview.outputs.has_targets }}
       fingerprint: ${{ steps.preview.outputs.fingerprint }}
     steps:
-      - name: Checkout trusted Cloud main
+      - name: 검증 대상 Cloud main 체크아웃
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
           path: cloud
           fetch-depth: 0
           persist-credentials: false
-      - name: Checkout BE main history
+      - name: BE main 전체 이력 체크아웃
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: 100-hours-a-week/KTB4-14th-BE
@@ -82,14 +82,14 @@ jobs:
           token: ${{ secrets.BE_READ_TOKEN }}
           fetch-depth: 0
           persist-credentials: false
-      - name: Registry inspection
+      - name: 레지스트리 이미지 검사
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-      - name: Install YAML validation dependency
+      - name: YAML 검증 의존성 설치
         working-directory: cloud
         run: |
           python3 -m venv "$RUNNER_TEMP/production-values-venv"
           "$RUNNER_TEMP/production-values-venv/bin/pip" install --no-cache-dir --no-deps -r scripts/requirements-staging-values.txt
-      - name: Validate staging result and preview production
+      - name: 스테이징 결과 검증 및 운영 대상 미리보기
         id: preview
         working-directory: cloud
         env:
@@ -110,14 +110,14 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - name: Checkout latest Cloud main
+      - name: 최신 Cloud main 체크아웃
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
           path: cloud
           fetch-depth: 0
           persist-credentials: false
-      - name: Checkout BE main history
+      - name: BE main 전체 이력 체크아웃
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: 100-hours-a-week/KTB4-14th-BE
@@ -126,14 +126,14 @@ jobs:
           token: ${{ secrets.BE_READ_TOKEN }}
           fetch-depth: 0
           persist-credentials: false
-      - name: Registry inspection
+      - name: 레지스트리 이미지 검사
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-      - name: Install YAML validation dependency
+      - name: YAML 검증 의존성 설치
         working-directory: cloud
         run: |
           python3 -m venv "$RUNNER_TEMP/production-values-venv"
           "$RUNNER_TEMP/production-values-venv/bin/pip" install --no-cache-dir --no-deps -r scripts/requirements-staging-values.txt
-      - name: Revalidate approved plan and propose production images
+      - name: 승인된 계획 재검증 및 운영 이미지 PR 생성
         working-directory: cloud
         env:
           PYTHONDONTWRITEBYTECODE: '1'
@@ -171,7 +171,7 @@ jobs:
       PYTHONDONTWRITEBYTECODE: '1'
     steps:
       # 후보 기록·스테이징 values·운영 기준선은 Cloud main의 동일 시점으로 대조합니다.
-      - name: Checkout trusted Cloud main
+      - name: 검증 대상 Cloud main 체크아웃
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
@@ -180,7 +180,7 @@ jobs:
           persist-credentials: false
       # 대상별 실제 배포 SHA부터 후보까지 누적 비교하므로 전체 Git 이력이 필요합니다.
       # BE 파일은 변경 경로 분석에만 사용하며 여기서 빌드하거나 실행하지 않습니다.
-      - name: Checkout full BE main history as data only
+      - name: 변경 분석용 BE main 전체 이력 체크아웃
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: 100-hours-a-week/KTB4-14th-BE
@@ -190,10 +190,10 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       # 스테이징에서 검증한 digest를 조회해 재사용합니다. 운영용으로 재빌드하지 않습니다.
-      - name: Registry inspection
+      - name: 레지스트리 이미지 검사
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       # 스테이징과 같은 YAML 검증기를 사용하고, 도구 설치는 checkout 밖에서 수행합니다.
-      - name: Install existing YAML validation dependency outside checkout
+      - name: 작업 트리 밖에 기존 YAML 검증 의존성 설치
         working-directory: cloud
         run: |
           python3 -m venv "$RUNNER_TEMP/production-values-venv"
@@ -202,7 +202,7 @@ jobs:
       # 기준선 누락·예정 버전 불일치·비교 불가 이력이 있으면 승격을 중단합니다.
       # PR 모드도 운영 values의 image.tag/digest만 바꾸며 실제 배포 기준선은 갱신하지 않습니다.
       # 배포는 Cloud 팀의 수동 Sync 후 확인하고, 기준선은 별도 리뷰를 거쳐 기록합니다.
-      - name: Validate, preview and optionally propose production images
+      - name: 운영 이미지 검증·미리보기 및 선택적 PR 생성
         working-directory: cloud
         env:
           RUN_ID: ${{ inputs.run_id }}

@@ -20,7 +20,8 @@ import backend_staging_retry as retry
 
 SOURCE = '100-hours-a-week/KTB4-14th-mockAI'
 WORKFLOW = '.github/workflows/cd.yml'
-WORKFLOW_NAME = 'AI Image CD'
+WORKFLOW_NAME = 'AI 이미지 발행'
+WORKFLOW_NAMES = frozenset((WORKFLOW_NAME, 'AI Image CD'))
 VALUES = 'apps/ai-values/values-ai-staging.yaml'
 RECORD = 'apps/ai-values/staging-ai-candidate.json'
 KEYS = {'schema_version', 'source_repository', 'source_sha', 'source_ref', 'image_repository',
@@ -116,7 +117,7 @@ class HTTPSRedirect(urllib.request.HTTPRedirectHandler):
 def fetch_candidate(root, run_id, attempt, client):
     require(POSITIVE.fullmatch(run_id or '') and POSITIVE.fullmatch(attempt or ''), 'Invalid dispatch identifiers')
     repo = repository(root); workflow, run = client.api('actions/workflows/cd.yml'), client.api(f'actions/runs/{run_id}/attempts/{attempt}')
-    require(workflow.get('path') == WORKFLOW and isinstance(workflow.get('id'), int) and run.get('workflow_id') == workflow['id'] and run.get('path') == WORKFLOW and run.get('name') == WORKFLOW_NAME and str(run.get('id')) == run_id and str(run.get('run_attempt')) == attempt and run.get('event') == 'push' and run.get('head_branch') == 'main' and run.get('status') == 'completed' and run.get('conclusion') == 'success' and run.get('repository', {}).get('full_name') == SOURCE and run.get('head_repository', {}).get('full_name') == SOURCE, 'Run is not the designated successful main AI publish attempt')
+    require(workflow.get('path') == WORKFLOW and isinstance(workflow.get('id'), int) and run.get('workflow_id') == workflow['id'] and run.get('path') == WORKFLOW and run.get('name') in WORKFLOW_NAMES and str(run.get('id')) == run_id and str(run.get('run_attempt')) == attempt and run.get('event') == 'push' and run.get('head_branch') == 'main' and run.get('status') == 'completed' and run.get('conclusion') == 'success' and run.get('repository', {}).get('full_name') == SOURCE and run.get('head_repository', {}).get('full_name') == SOURCE, 'Run is not the designated successful main AI publish attempt')
     sha = run.get('head_sha'); require(isinstance(sha, str) and SHA.fullmatch(sha), 'Invalid source SHA')
     response = client.api(f'actions/runs/{run_id}/artifacts?per_page=100&page=1')
     require(isinstance(response.get('artifacts'), list) and response.get('total_count') == len(response['artifacts']), 'Incomplete artifact list')

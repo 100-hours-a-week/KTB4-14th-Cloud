@@ -95,7 +95,7 @@ def execute(repo, run_id, attempt, client, temp_parent=None, *, validate_only=Fa
             and workflow.get('path') == '.github/workflows/publish-image.yml'
             and run.get('workflow_id') == workflow['id']
             and run.get('path') == workflow['path']
-            and run.get('name') == 'Publish backend image'
+            and run.get('name') in ('Publish backend image', 'BE 이미지 발행')
             and type(run.get('id')) is int and str(run['id']) == run_id
             and type(run.get('run_attempt')) is int and str(run['run_attempt']) == attempt
             and run.get('event') == 'push' and run.get('head_branch') == 'main'
