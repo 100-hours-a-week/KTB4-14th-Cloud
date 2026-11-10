@@ -61,6 +61,26 @@ def changed_paths(be, old, new):
     return raw.decode('utf-8').strip('\0').split('\0') if raw else []
 
 
+def production_baseline(root):
+    path = root / BASELINE
+    require(path.is_file() and not path.is_symlink(), 'Production baseline missing or not a regular file')
+    baseline = values.load_json(path.read_text())
+    require(isinstance(baseline, dict) and set(baseline) == {'schema_version', 'deployments'}
+            and type(baseline['schema_version']) is int and baseline['schema_version'] == 1
+            and isinstance(baseline['deployments'], dict)
+            and set(baseline['deployments']) == set(TARGETS), 'Missing or invalid production baselines')
+    for target in TARGETS:
+        entry = baseline['deployments'][target]
+        require(isinstance(entry, dict) and set(entry) == {'source_sha', 'image_digest', 'confirmed_by', 'confirmed_at', 'evidence'},
+                'Invalid baseline entry: ' + target)
+        require(all(isinstance(v, str) and v.strip() for v in entry.values()), 'Unconfirmed baseline: ' + target)
+        require(re.fullmatch('[0-9a-f]{40}', entry['source_sha'])
+                and re.fullmatch('sha256:[0-9a-f]{64}', entry['image_digest']), 'Invalid baseline SHA/digest: ' + target)
+        confirmed = datetime.fromisoformat(entry['confirmed_at'].replace('Z', '+00:00'))
+        require(confirmed.tzinfo is not None, 'Baseline confirmation timestamp needs timezone')
+    return baseline
+
+
 def plan(root, be, candidate, expected_digest, evidence):
     values.validate_candidate(candidate)
     require(candidate['image_digest'] == expected_digest, 'Requested digest does not match validated artifact')
@@ -73,22 +93,10 @@ def plan(root, be, candidate, expected_digest, evidence):
         doc, _ = values.parse_yaml((root / name).read_text())
         require(doc['image'].get('tag') == candidate['image_tag']
                 and doc['image']['digest'] == expected_digest, 'Staging values differ from candidate')
-    require((root / BASELINE).is_file() and not (root / BASELINE).is_symlink(), 'Production baseline missing or not a regular file')
-    baseline = values.load_json((root / BASELINE).read_text())
-    require(isinstance(baseline, dict) and set(baseline) == {'schema_version', 'deployments'}
-            and type(baseline['schema_version']) is int and baseline['schema_version'] == 1
-            and isinstance(baseline['deployments'], dict)
-            and set(baseline['deployments']) == set(TARGETS), 'Missing or invalid production baselines')
+    baseline = production_baseline(root)
     rows = {}
     for target in TARGETS:
         entry = baseline['deployments'][target]
-        require(isinstance(entry, dict) and set(entry) == {'source_sha', 'image_digest', 'confirmed_by', 'confirmed_at', 'evidence'},
-                'Invalid baseline entry: ' + target)
-        require(all(isinstance(v, str) and v.strip() for v in entry.values()), 'Unconfirmed baseline: ' + target)
-        require(re.fullmatch('[0-9a-f]{40}', entry['source_sha'])
-                and re.fullmatch('sha256:[0-9a-f]{64}', entry['image_digest']), 'Invalid baseline SHA/digest: ' + target)
-        confirmed = datetime.fromisoformat(entry['confirmed_at'].replace('Z', '+00:00'))
-        require(confirmed.tzinfo is not None, 'Baseline confirmation timestamp needs timezone')
         name = f'apps/spring-value/{target}-prod.yaml'
         doc, _ = values.parse_yaml((root / name).read_text())
         require(doc['image']['digest'] == entry['image_digest']

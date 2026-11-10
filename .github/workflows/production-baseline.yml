@@ -1,0 +1,149 @@
+name: Update production baseline
+
+# This workflow records a deployment that a responsible operator has already
+# synced and verified. It never contacts a Kubernetes or Argo CD endpoint.
+on:
+  # Always report this required status, including values-only promotion PRs.
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, edited, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      service:
+        description: Promotion family whose post-Sync baseline is being recorded
+        required: true
+        type: choice
+        options: [backend, ai]
+      promotion_pr:
+        description: Merged Cloud production-promotion PR number
+        required: true
+        type: string
+      observations:
+        description: JSON collected by the operator from Argo CD and Kubernetes
+        required: true
+        type: string
+      functional_evidence:
+        description: Verifier's functional-test evidence; do not claim unchecked tests
+        required: true
+        type: string
+
+# A retry must see the prior PR and never race another baseline proposal for the
+# same family. It does not cancel an in-progress verification.
+concurrency:
+  group: production-baseline-${{ github.event_name }}-${{ github.event_name == 'workflow_dispatch' && inputs.service || github.event.pull_request.number }}
+  cancel-in-progress: false
+
+# The ordinary workflow token can read GitHub state only. The PR token is
+# injected only into the one step that can create a baseline proposal.
+permissions:
+  contents: read
+  pull-requests: read
+  actions: read
+
+jobs:
+  tests:
+    name: Production baseline tests
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      # Ordinary PR tests may execute PR code; they receive no write/cluster tokens.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install YAML parser and test baseline logic
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python3 -m venv "$RUNNER_TEMP/baseline-tests-venv"
+          "$RUNNER_TEMP/baseline-tests-venv/bin/pip" install --no-cache-dir --no-deps -r scripts/requirements-staging-values.txt
+          "$RUNNER_TEMP/baseline-tests-venv/bin/python" -m unittest discover -s tests -p 'test_production_baseline.py' -v
+
+  baseline-freshness:
+    name: Production baseline freshness
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      # PR blobs are data only: execute the validator from latest trusted main.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          # Only the job's read-only GITHUB_TOKEN is persisted for PR-ref fetches.
+          # No PR branch code or Cloud write token is used in this job.
+          persist-credentials: true
+      - name: Detect baseline change without executing PR code
+        id: baseline
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          git fetch origin "refs/pull/$PR_NUMBER/head"
+          comparison_base=$(git merge-base HEAD FETCH_HEAD)
+          git diff --no-renames --name-only "$comparison_base" FETCH_HEAD > "$RUNNER_TEMP/pr-files.txt"
+          if grep -Eq '^deploy/(backend|ai)-production-baseline\.json$' "$RUNNER_TEMP/pr-files.txt"; then
+            echo 'changed=true' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Install YAML parser
+        if: steps.baseline.outputs.changed == 'true'
+        run: python -m pip install --no-deps -r scripts/requirements-staging-values.txt
+      - name: Check baseline against latest main and merged promotion
+        if: steps.baseline.outputs.changed == 'true'
+        env:
+          CLOUD_READ_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python scripts/production_baseline.py check --pr "$PR_NUMBER"
+
+  validate-and-propose:
+    # workflow_dispatch can target another ref; accepting it would let an
+    # arbitrary implementation create a baseline proposal. Only main is valid.
+    if: github.event_name == 'workflow_dispatch' && github.repository == '100-hours-a-week/KTB4-14th-Cloud' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      SERVICE: ${{ inputs.service }}
+      PROMOTION_PR: ${{ inputs.promotion_pr }}
+      OBSERVATIONS: ${{ inputs.observations }}
+      FUNCTIONAL_EVIDENCE: ${{ inputs.functional_evidence }}
+      CLOUD_READ_TOKEN: ${{ github.token }}
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - name: Checkout latest trusted Cloud main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install baseline validation dependency
+        run: |
+          python3 -m venv "$RUNNER_TEMP/production-baseline-venv"
+          "$RUNNER_TEMP/production-baseline-venv/bin/pip" install --no-cache-dir --no-deps -r scripts/requirements-staging-values.txt
+
+      # The script rechecks merged PR, values, observations, and an existing
+      # baseline PR immediately before it writes its one-file proposal.
+      - name: Validate post-Sync evidence and create or reuse baseline PR
+        env:
+          CLOUD_PR_TOKEN: ${{ secrets.CLOUD_PR_TOKEN }}
+        run: |
+          set -euo pipefail
+          auth_dir=$(mktemp -d "$RUNNER_TEMP/production-baseline-auth.XXXXXX")
+          trap 'rm -rf "$auth_dir"' EXIT
+          cat > "$auth_dir/askpass" <<'ASKPASS'
+          #!/bin/sh
+          case "$1" in
+            *Username*) printf '%s\n' x-access-token ;;
+            *Password*) printf '%s\n' "$CLOUD_PR_TOKEN" ;;
+            *) exit 1 ;;
+          esac
+          ASKPASS
+          chmod 700 "$auth_dir/askpass"
+          GIT_ASKPASS="$auth_dir/askpass" GIT_TERMINAL_PROMPT=0 \
+            "$RUNNER_TEMP/production-baseline-venv/bin/python" scripts/production_baseline.py create
