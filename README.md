@@ -1,146 +1,195 @@
-# Audigo Infrastructure
+# Audigo Infrastructure & GitOps
 
-AWS CloudFormation으로 Audigo 인프라를 관리하는 저장소입니다.
+Audigo 서비스의 **AWS 인프라와 Kubernetes 배포 설정을 코드로 관리하는 Cloud 저장소**입니다.
+AWS 리소스는 **CloudFormation 기반 IaC(Infrastructure as Code)** 로 정의하고,
+Kubernetes 애플리케이션과 운영 도구는 **Helm과 Argo CD 기반 GitOps**로 관리합니다.
 
-> **현재 단계:** 기존 리소스의 코드 목록을 정리하고 AWS 조회 결과와 비교하는 단계입니다.
-> 최신 IaC 생성기 템플릿에는 **74개 리소스·30개 유형**, 추가된 원본 스택 템플릿에는 **ECS 서비스 선언 7개**가 있습니다.
-> Mock AI 중복을 제외한 기존 리소스 코드의 비교 기준선은 **80개 항목**이며, `network.yaml`의 신규 초안 9개는 별도입니다.
-> 나머지 기능별 템플릿 10개는 비어 있습니다. 저장소의 템플릿에 대한 실제 편입·배포 검증은 아직 수행하지 않았습니다.
+인프라 템플릿, 서비스·환경별 배포 설정, 모니터링, 시크릿 연동 및 GitHub Actions 워크플로를 함께 보관하여
+변경 내용을 Git에서 검토하고 배포 이력을 추적할 수 있도록 구성합니다.
+Spring Boot 백엔드와 AI 서비스의 이미지는 각 소스 저장소에서 빌드하며, 이 저장소에서는 검증된 이미지의 배포 설정과 운영 승격을 관리합니다.
 
-## 목표와 리소스 목록
+## 관리 범위 (요약하기)
 
-기존 인프라를 코드로 정리하고 CloudFormation으로 관리한 뒤, **ECS on EC2 → Fargate**, **EC2 MySQL → RDS**로 전환합니다.
-V2가 안정화되면 V1의 불필요한 리소스를 정리합니다.
+**IaC 영역**에서는 CloudFormation으로 네트워크, DNS, RDS, Valkey, SQS, ALB, S3·CloudFront 및 ECS 관련 AWS 리소스를 관리합니다.
+인프라 템플릿과 배포 설정은 `cloudformation/`, `deploy/`, `bootstrap/`에 보관하며,
+GitHub Actions에서 템플릿을 검증하고 Change Set을 생성한 뒤 검토·승인을 거쳐 변경 사항을 적용합니다.
 
-**[기존 리소스 목록 및 AWS 비교 문서](docs/resource-inventory.md)**에서 다음을 확인할 수 있습니다.
+**GitOps 영역**에서는 Helm과 Argo CD로 백엔드·AI 워크로드, 시크릿 연동, 모니터링 및 클러스터 운영 도구의 Kubernetes 배포 설정을 관리합니다.
+공통 Chart와 서비스·환경별 values는 `apps/`에, Application 선언은 `argocd-apps/`에,
+운영 도구와 모니터링 설정은 `addons/`, `monitoring/`에 보관합니다.
+GitHub Actions를 통해 검증된 이미지 정보를 values에 반영하고, Argo CD가 각 Application의 자동·수동 동기화 정책에 따라 클러스터에 적용합니다.
 
-- 스캔 템플릿의 전체 논리 ID·리소스 유형·실제 ID 또는 비교 키
-- 제공된 AWS 스캔, ECS 서비스·태스크 정의, EC2 조회 결과와의 비교
-- 추가된 원본 스택 템플릿 7개와 기존 스택이 관리하는 서비스
-- 원본 템플릿과 스캔·제공된 실제 ECS 조회의 설정 차이 (Mock AI `:3` / `:6`)
-- 신규 네트워크 초안 9개와 기존 리소스의 구분, 편입 전 확인사항
+## 폴더 구조
 
-> 스캔 템플릿의 리소스는 모두 `Retain` 정책입니다. 코드에서 제거해도 AWS 리소스가 삭제되는 것은 아니므로,
-> V1 정리 시 삭제 정책과 의존성을 별도로 검토해야 합니다. **원본 서비스 스택 7개에는 이 보존 정책이 선언되어 있지 않습니다.**
-> 자세한 근거는 리소스 목록 문서에 정리했습니다.
+```text
+.
+├── .github/workflows/              # 인프라 검증·적용, 이미지 갱신·운영 승격 워크플로
+├── cloudformation/                 # AWS 리소스별 CloudFormation 템플릿
+├── deploy/                         # IaC 실행 설정과 운영 배포 기준선
+│   ├── stacks.json                 # 스택·템플릿·실행 역할·활성화 여부 매핑
+│   ├── parameters/                 # 스택별 파라미터
+│   ├── imports/                    # 기존 AWS 리소스 편입용 식별자 자료
+│   ├── iam/                        # 이전 network 전용 IAM 참고 정책
+│   ├── backend-production-baseline.json
+│   └── ai-production-baseline.json # 서비스별 운영 배포 기준선
+├── bootstrap/                      # 초기 설치 및 별도 관리자용 IAM 구성
+│   ├── argocd/                     # Argo CD Helm values
+│   ├── cilium/                     # Cilium values 및 설치 스크립트
+│   ├── aws-lb-controller/           # AWS Load Balancer Controller 설정·권한·설치
+│   └── install.sh                  # Argo CD 초기 설치 스크립트
+├── argocd-apps/                     # Argo CD Application 선언
+│   ├── root.yaml                   # 하위 Application을 관리하는 Root Application
+│   └── applications/               # 서비스·운영 도구별 Application
+│       ├── spring/                 # 백엔드 운영·스테이징
+│       ├── ai/                     # AI 운영·스테이징 및 시크릿 연동
+│       └── monitoring/             # 모니터링 스택 및 모니터링용 ESO
+├── apps/                           # 애플리케이션 Helm 배포 설정
+│   ├── chart/                      # Spring Boot·AI 공통 Helm Chart
+│   ├── spring-value/               # 백엔드 서비스·환경별 values
+│   └── ai-values/                  # AI API·Worker 및 스테이징 values
+├── addons/                         # 클러스터 운영 도구 설정
+│   ├── external-secrets/           # ESO values와 백엔드·AI SecretStore/ExternalSecret
+│   ├── external-secrets-monitoring/ # 모니터링용 ESO 및 시크릿 리소스
+│   ├── reloader/                   # Secret 변경 시 대상 워크로드 재시작 설정
+│   └── metrics-server/             # Kubernetes 리소스 메트릭 수집 설정
+├── monitoring/                     # 관측성 도구별 Helm values
+│   ├── kube-prometheus-stack/      # Prometheus·Grafana·Alertmanager
+│   ├── loki/                       # 로그 저장·조회
+│   ├── alloy/                      # Pod 로그 수집·전송
+│   └── yace/                       # CloudWatch SQS 메트릭 수집
+├── releases/                       # 기존 AI Worker ECS 배포용 릴리스 명세
+├── scripts/                        # IaC 계획·적용, 후보 검증·승격·기준선 갱신 로직
+├── tests/                          # 배포 안전장치·워크플로 테스트 및 수동 검증 자료
+└── docs/                           # 리소스별 운영·편입 가이드와 GitOps 배포 문서
+    └── gitops/                     # 백엔드·AI 운영 승격 및 배포 기준선 절차
+```
 
-## 기능별 템플릿 구성 (목표 구조)
+## IaC: CloudFormation 기반 인프라 관리
 
-기능별 신규 구성 초안은 [`cloudformation/`](cloudformation/)에 있습니다.
-기존 리소스 자료는 [`audigo-existing-stacks-20261012-100305/`](audigo-existing-stacks-20261012-100305/)에 있으며, 스캔 YAML 2개와 원본 서비스 스택의 JSON `.template` 7개를 보관합니다.
+AWS 리소스를 기능별 템플릿으로 나누고, [`deploy/stacks.json`](deploy/stacks.json)에서
+템플릿·파라미터·실행 역할 그룹·배포 활성화 여부를 연결합니다.
+기존 리소스의 CloudFormation 편입(IMPORT)과 신규 리소스 생성은 개별 가이드에 따라 구분합니다.
 
-| 파일 | 관리 범위 |
-|---|---|
-| [`network.yaml`](cloudformation/network.yaml) | 기존 VPC·퍼블릭 서브넷 참조, 프라이빗 서브넷, 라우팅, 보안 그룹 |
-| [`db.yaml`](cloudformation/db.yaml) | RDS, DB Subnet Group |
-| [`cache.yaml`](cloudformation/cache.yaml) | Valkey |
-| [`sqs.yaml`](cloudformation/sqs.yaml) | AI Job/Result Standard Queue 2개, CloudWatch 알람 ([가이드](docs/sqs-create.md)) |
-| [`alb.yaml`](cloudformation/alb.yaml) | ALB, 리스너, 대상 그룹, 경로 규칙 |
-| [`frontend.yaml`](cloudformation/frontend.yaml) | 프론트엔드 S3, CloudFront |
-| [`ecs-common.yaml`](cloudformation/ecs-common.yaml) | ECS 클러스터, 공통 실행 역할 |
-| [`rest-api.yaml`](cloudformation/rest-api.yaml) | REST Task Definition, Service, Task Role, Auto Scaling |
-| [`websocket.yaml`](cloudformation/websocket.yaml) | WS Task Definition, Service, Task Role, Auto Scaling |
-| [`ai-api.yaml`](cloudformation/ai-api.yaml) | AI API Task Definition, Service, Task Role, 확장 설정 |
-| [`monitoring.yaml`](cloudformation/monitoring.yaml) | 공통 모니터링과 알림 |
+### 인프라 변경 흐름
 
-## 신규 네트워크 초안 (`network.yaml`)
+```text
+CloudFormation·배포 설정 변경
+  → PR에서 템플릿·설정 검증 및 안전장치 테스트
+  → main 반영 시 활성 스택 전체 Change Set 계획 생성
+  → 계획 검토 및 iac-production Environment 승인
+  → 검토한 동일 Change Set 적용
+```
 
-### 기존 인프라
+- **CI:** [`cloudformation-ci.yml`](.github/workflows/cloudformation-ci.yml)에서 템플릿 lint, 배포 설정 검증, Python 테스트를 수행합니다.
+- **CD:** [`cloudformation-cd.yml`](.github/workflows/cloudformation-cd.yml)에서 실제 AWS 상태와 비교한 계획을 생성하고, 변경이 있는 경우 승인 후 적용합니다. 전체·개별 스택의 수동 재실행도 지원합니다.
+- **권한 분리:** GitHub OIDC 인증과 Core / Platform / App CloudFormation 실행 역할을 사용합니다. IAM 기준은 [`bootstrap/infra-iam.yaml`](bootstrap/infra-iam.yaml)이며 별도 관리자가 적용합니다.
+- **변경 제한:** 삭제·교체 변경을 차단하고, IMPORT는 일반 CD에서 수행하지 않습니다. 신규 생성은 스택별 `allow_create` 설정과 권한 준비가 필요합니다.
 
-아래는 현재 인프라 정보입니다. `network.yaml`은 VPC와 퍼블릭 서브넷을 **ID로 참조**하며,
-기존 VPC·서브넷·IGW·라우팅·엔드포인트를 생성하거나 변경하지 않습니다.
-기존 리소스를 이 스택의 관리 대상으로 가져오는 것도 아닙니다.
+실제 승인 적용에는 GitHub Environment 보호 규칙과 배포 활성화 변수 설정이 필요합니다.
+설정 방법과 실패 처리 절차는 [CloudFormation CI/CD 운영 가이드](docs/infrastructure-cicd.md),
+[그룹별 IAM 운영 가이드](docs/iam-group-permissions.md)를 참고합니다.
 
-| 리소스 | 이름 / ID | 설정 |
-|---|---|---|
-| VPC | `audigo-vpc` / `vpc-04129874f9fd135c6` | `10.0.0.0/16`, IPv6 없음 |
-| 퍼블릭 서브넷 A | `audigo-prd-pub-2a` | `ap-northeast-2a`, `10.0.0.0/20` |
-| 퍼블릭 서브넷 B | `audigo-prd-pub-2b` | `ap-northeast-2b`, `10.0.16.0/20` |
-| 퍼블릭 라우팅 테이블 | `audigo-prd-pub-rt` | 퍼블릭 서브넷 2개 연결, IGW 경로 |
-| 메인 라우팅 테이블 | `audigo-prd-main-rt` | 명시적인 서브넷 연결 없음, 로컬 경로 |
-| 인터넷 게이트웨이 | `audigo-prd-igw` | 퍼블릭 서브넷 인터넷 연결 |
-| S3 게이트웨이 엔드포인트 | `audigo-prd-vpce` | S3 접근용 |
+## GitOps: Helm과 Argo CD 기반 배포 관리
 
-### 새로 생성할 리소스
+서비스의 배포 상태를 Helm Chart와 values로 선언하고, Argo CD가 Git의 설정과 클러스터 상태를 비교·동기화하도록 구성합니다.
+Application의 저장소 참조는 `main`을 기준으로 하며, 외부 Helm Chart는 Application에 지정한 버전을 사용합니다.
 
-| 리소스 | 기본 설정 |
-|---|---|
-| 프라이빗 서브넷 A | `ap-northeast-2a`, `10.0.32.0/20` |
-| 프라이빗 서브넷 B | `ap-northeast-2b`, `10.0.48.0/20` |
-| 프라이빗 라우팅 테이블 | 프라이빗 서브넷 2개 연결, 기본은 VPC 내부 경로만 사용 |
-| 보안 그룹 | ALB, ECS, DB, Valkey용 각 1개 |
+### Application과 Helm values의 관계
 
-리소스 `Name` 태그의 기본 접두사는 `audigo-prd`입니다.
-**NAT Gateway와 VPC Endpoint는 생성하지 않습니다.**
+```text
+argocd-apps/root.yaml
+  → argocd-apps/applications/ 아래의 Application 관리
+    → 애플리케이션: apps/chart + 서비스·환경별 values
+    → 운영 도구: 외부 Helm Chart + addons/ 또는 monitoring/의 values
+  → 각 Application의 대상 namespace에 동기화
+```
 
-### 보안 그룹 인바운드
+공통 Chart인 [`apps/chart/`](apps/chart/)는 Deployment, Service, Ingress, ConfigMap,
+ExternalSecret, HPA, NetworkPolicy, ServiceMonitor/PodMonitor 템플릿을 제공합니다.
+리소스 생성 여부와 이미지·리소스 요청량·probe·환경변수 등은 서비스별 values로 제어합니다.
 
-| 대상 | 허용 출발지 | 기본 TCP 포트 |
-|---|---|---|
-| ALB | 모든 IPv4 주소 (`0.0.0.0/0`) | `80`, `443` |
-| ECS | ALB 보안 그룹 | REST `8080`, WS `8081`, AI `8000` |
-| DB | ECS 보안 그룹 | `3306` (MySQL 가정) |
-| Valkey | ECS 보안 그룹 | `6379` |
+| 구분 | values 경로 | 주요 대상 |
+| --- | --- | --- |
+| 백엔드 | [`apps/spring-value/`](apps/spring-value/) | auth, chat API·WS, travel API·Worker, general API·WS |
+| AI | [`apps/ai-values/`](apps/ai-values/) | match-ai, travel-ai, travel-ai-worker, ai-staging |
+| 운영 도구 | [`addons/`](addons/), [`monitoring/`](monitoring/) | ESO, Reloader, Metrics Server, 모니터링 스택 |
 
-- 서비스 포트는 파라미터로 변경할 수 있습니다. 실제 애플리케이션·컨테이너·대상 그룹 포트와 맞춰야 합니다.
-- REST·WS·AI는 현재 하나의 ECS 보안 그룹을 공유합니다. 내부 AI 호출이 필요하면 별도 인바운드 규칙이 필요합니다.
-- 보안 그룹의 기본 아웃바운드는 전체 허용입니다.
-- HTTPS 리스너와 인증서는 추후 `alb.yaml`에서 구성합니다.
+### 환경별 동기화 정책
 
-## 배포 전 확인사항
+| 대상 | 동기화 | 설정상 특징 |
+| --- | --- | --- |
+| 백엔드·AI 운영 앱 | 수동 Sync | 운영 values 반영 후 담당자가 Application별 배포 수행 |
+| 백엔드 스테이징 앱 | 자동 Sync | `selfHeal: true`, `prune: false` |
+| AI 스테이징 앱 | 자동 Sync | `selfHeal: true`, `prune: true` |
+| Root Application, Argo CD, 백엔드·AI ESO, 시크릿 Application, Reloader | 자동 Sync | `selfHeal: true`, `prune: false` |
+| 모니터링 Application, 모니터링용 ESO, Metrics Server | 자동 Sync | `selfHeal: true`, `prune: true` |
 
-### 파라미터
+`selfHeal`은 클러스터에서 발생한 설정 차이를 Git의 선언에 맞추고,
+`prune`은 Git에서 제거된 리소스를 동기화 시 삭제할지 결정하는 설정입니다.
+Root Application의 자동 동기화와 개별 운영 앱의 수동 동기화는 각각의 Application에 설정되어 있습니다.
 
-| 파라미터 | 기본값 / 입력할 값 |
-|---|---|
-| `NamePrefix` | `audigo-prd` |
-| `ExistingVpcId` | `vpc-04129874f9fd135c6` |
-| `ExistingPublicSubnetAId` | **필수 입력:** `audigo-prd-pub-2a`의 실제 `subnet-...` ID |
-| `ExistingPublicSubnetBId` | **필수 입력:** `audigo-prd-pub-2b`의 실제 `subnet-...` ID |
-| `PrivateSubnetAAvailabilityZone` | `ap-northeast-2a` |
-| `PrivateSubnetBAvailabilityZone` | `ap-northeast-2b` |
-| `PrivateSubnetACidr` | `10.0.32.0/20` |
-| `PrivateSubnetBCidr` | `10.0.48.0/20` |
+### 이미지 갱신과 운영 승격
 
-### 체크리스트
+스테이징 워크플로는 소스 저장소의 이미지 발행 run·artifact와 이미지 digest·ARM64 지원 여부를 검증한 뒤,
+스테이징 values와 후보 기록을 Git에 반영합니다. 이미지는 재빌드하지 않습니다.
 
-- [ ] 배포 리전이 `ap-northeast-2`인지 확인
-- [ ] 퍼블릭 서브넷 ID 2개 입력 및 지정한 VPC 소속 여부 확인
-- [ ] 두 퍼블릭 서브넷이 서로 다른 AZ에 있고 IGW 경로가 설정되어 있는지 확인
-- [ ] 신규 프라이빗 CIDR이 VPC 범위 안에 있고 기존 모든 서브넷과 겹치지 않는지 확인
-- [ ] 서비스별 실제 포트 확인
-- [ ] ECS 이미지 다운로드·로그 전송·외부 API 호출에 필요한 네트워크 연결 구성 확인
+```text
+소스 저장소에서 이미지 발행
+  → 스테이징 후보 검증 및 values 갱신
+  → Argo CD 자동 Sync 후 스테이징 기능 확인
+  → 운영 승격 미리보기·검토 및 PR 생성
+  → 운영 values PR 병합
+  → 운영 Application 수동 Sync 및 실제 이미지·기능 확인
+  → 운영 배포 기준선 갱신 PR 검토·병합
+```
 
-### 기존 S3 엔드포인트 연결
+운영 values와 실제 배포 확인 기록은 따로 관리합니다.
+[`deploy/backend-production-baseline.json`](deploy/backend-production-baseline.json)과
+[`deploy/ai-production-baseline.json`](deploy/ai-production-baseline.json)은 운영 Sync 후 확인한 버전의 기준선입니다.
+후보 기록이나 PR 병합만으로 실제 Pod 배포·기능 검증이 완료된 것으로 처리하지 않습니다.
 
-새 프라이빗 서브넷에서 기존 S3 게이트웨이 엔드포인트를 사용하려면:
+- [백엔드 운영 승격](docs/gitops/backend-production.md)
+- [AI 운영 승격](docs/gitops/ai-production.md)
+- [운영 배포 기준선 갱신](docs/gitops/production-baseline.md)
 
-1. 배포 결과에서 `PrivateRouteTableId`를 확인합니다.
-2. 기존 엔드포인트 `audigo-prd-vpce`의 라우팅 테이블 연결에 해당 ID를 추가합니다.
-3. 기존 라우팅 테이블 연결은 유지합니다.
+기존 AI Worker ECS 배포는 [`releases/ai.yml`](releases/ai.yml)과
+[`ai-deploy.yml`](.github/workflows/ai-deploy.yml)을 사용하는 별도 경로입니다.
 
-> 이 연결은 템플릿에서 자동으로 수행하지 않습니다.
-> S3 엔드포인트만으로는 ECR API, CloudWatch Logs 및 외부 API 접근을 해결할 수 없습니다.
-> ECS 배포 전에 필요한 VPC Endpoint 또는 NAT 구성을 추가해야 합니다.
+## 시크릿과 모니터링
+
+### 시크릿 관리
+
+실제 비밀값은 AWS Secrets Manager에 두고, External Secrets Operator(ESO)가
+SecretStore·ExternalSecret 설정에 따라 Kubernetes Secret으로 동기화합니다.
+Reloader는 감시 범위와 대상 annotation이 설정된 워크로드에 대해 Secret 변경 시 Pod 롤링 재시작을 유도합니다.
+
+```text
+AWS Secrets Manager → ESO → Kubernetes Secret → Reloader → 대상 Pod 롤링 재시작
+```
+
+운영 앱의 수동 Sync 정책과 Secret 동기화·재시작은 별도 흐름입니다.
+시크릿 변경은 운영 앱의 수동 Sync 없이도 대상 Pod 재시작을 유발할 수 있습니다.
+설정과 검증 자료는 [백엔드 시크릿 사용법](addons/external-secrets/README.md),
+[Reloader 사용법](addons/reloader/README.md), [`tests/manual/`](tests/manual/)에서 확인할 수 있습니다.
+
+### 모니터링 구성
+
+[`argocd-apps/applications/monitoring/`](argocd-apps/applications/monitoring/)에서 외부 Helm Chart와
+이 저장소의 values를 연결해 모니터링 스택을 관리합니다.
+
+| 도구 | 역할 | 설정 |
+| --- | --- | --- |
+| kube-prometheus-stack | Prometheus 메트릭 수집, Grafana 시각화, Alertmanager 알림 | [`values.yaml`](monitoring/kube-prometheus-stack/values.yaml) |
+| Alloy → Loki | 각 노드의 Pod 로그를 수집해 Loki로 전송·저장 | [Alloy](monitoring/alloy/values.yaml), [Loki](monitoring/loki/values.yaml) |
+| YACE | CloudWatch의 SQS 메트릭을 Prometheus에 제공 | [`values.yaml`](monitoring/yace/values.yaml) |
+| Metrics Server | Kubernetes 리소스 메트릭 제공 | [`values.yaml`](addons/metrics-server/values.yaml) |
 
 ## 보안 및 로컬 파일
 
-AWS 인증 정보, 환경 변수 및 개인 키는 커밋하지 않습니다.
-`.gitignore`에서 다음 로컬 파일을 제외합니다.
+AWS 인증 정보, 실제 비밀값, 개인 키는 Git에 커밋하지 않습니다.
+일반 설정은 ConfigMap·values·배포 파라미터로, 비밀값은 Secrets Manager 연동으로 관리합니다.
 
-- IDE 설정: `.idea/`
-- 에이전트 실행 상태: `.omx/`
-- AWS 인증 정보: `.aws/`
-- 환경 변수: `.env`, `.env.*` (`.env.example` 제외)
-- 개인 키: `*.pem`, `*.key`
-- macOS 파일: `.DS_Store`
+`.gitignore`에서는 `.aws/`, `.env`, `.env.*`(`.env.example` 제외), `*.pem`, `*.key`,
+IDE 설정, `.omx/`, `.venv/`, Python 캐시와 macOS 파일 등을 제외합니다.
 
-## 인프라 CI/CD
-
-전체 CloudFormation 템플릿 검증과 main 병합 시 자동 계획 생성·승인 후 배포를 지원합니다.
-`Run workflow`로 전체 또는 개별 스택 계획을 재실행할 수도 있습니다.
-현재 배포 활성화 대상은 `audigo-network`이며, 운영 적용 전 IAM 및 GitHub Environment 설정이 필요합니다.
-
-- [CI/CD 설정 및 운영 가이드](docs/infrastructure-cicd.md)
-- [파일과 스택 매핑](deploy/stacks.json)
-- [서비스 릴리즈 규칙 참고](docs/naming-conventions.md)
+서비스·환경·릴리스 명명 규칙은 [명명 규칙 문서](docs/naming-conventions.md)를 참고합니다.
