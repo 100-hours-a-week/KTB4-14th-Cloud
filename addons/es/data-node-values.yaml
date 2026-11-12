@@ -24,6 +24,9 @@ createCert: false
 secret:
   enabled: false
 
+nodeSelector:
+  audigo.kr/node-pool: worker
+
 volumeClaimTemplate:
   storageClassName: elasticsearch-gp3
 

@@ -12,5 +12,7 @@ controller:
       effect: NoSchedule
 
 node:
+  nodeSelector:
+    audigo.kr/node-pool: worker
   hostNetwork: true
   enableWindows: false
