@@ -37,8 +37,10 @@ Cloud 팀은 생성된 PR을 검토하고 수동 병합한다. 기준선 PR에�
 `Production baseline freshness` 검사를 필수로 적용하고, `main` 보호 규칙에서
 최신 base branch 반영을 요구하는 strict 설정을 사용한다.
 
-`CLOUD_PR_TOKEN`에는 기준선 브랜치 push와 PR 생성에 필요한 Contents 및 Pull
-requests 쓰기 권한을 부여한다. Actions의 기본 토큰은 GitHub 읽기 권한을 사용한다.
+`CLOUD_PR_TOKEN`은 Cloud 저장소에서 사용할 수 있는 Actions 시크릿으로 등록한다.
+기준선 갱신 job은 Environment를 사용하지 않으므로 Environment에만 저장한
+시크릿은 이 job에 전달되지 않는다. 토큰에는 기준선 브랜치 push와 PR 생성에
+필요한 Contents 및 Pull requests 쓰기 권한을 부여한다. Actions의 기본 토큰은 GitHub 읽기 권한을 사용한다.
 
 ## 운영 앱 확인
 

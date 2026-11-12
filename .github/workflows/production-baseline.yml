@@ -124,6 +124,10 @@ jobs:
           CLOUD_PR_TOKEN: ${{ secrets.CLOUD_PR_TOKEN }}
         run: |
           set -euo pipefail
+          if [[ -z "$CLOUD_PR_TOKEN" ]]; then
+            echo "::error::CLOUD_PR_TOKEN이 비어 있습니다. Cloud 저장소에서 사용할 수 있는 Actions 시크릿으로 등록하세요."
+            exit 1
+          fi
           auth_dir=$(mktemp -d "$RUNNER_TEMP/production-baseline-auth.XXXXXX")
           trap 'rm -rf "$auth_dir"' EXIT
           cat > "$auth_dir/askpass" <<'ASKPASS'
