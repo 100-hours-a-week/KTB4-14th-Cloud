@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: aws-ebs-csi-driver
+  namespace: argocd
+spec:
+  project: default
+  sources:
+    - repoURL: https://kubernetes-sigs.github.io/aws-ebs-csi-driver
+      chart: aws-ebs-csi-driver
+      targetRevision: "2.68.0"
+      helm:
+        releaseName: aws-ebs-csi-driver
+        valueFiles:
+          - $values/addons/aws-ebs-csi-driver/values.yaml
+    - repoURL: https://github.com/100-hours-a-week/KTB4-14th-Cloud.git
+      targetRevision: main
+      ref: values
+      path: addons/aws-ebs-csi-driver/resources
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system

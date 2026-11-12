@@ -1,0 +1,59 @@
+clusterName: "elasticsearch"
+nodeGroup: "master"
+
+roles:
+  - master
+
+replicas: 1
+minimumMasterNodes: 1
+
+image: "docker.elastic.co/elasticsearch/elasticsearch"
+imageTag: "8.5.1"
+imagePullPolicy: "IfNotPresent"
+
+# 기본 sysctl 초기화 컨테이너에도 요청량과 상한을 지정합니다.
+initResources:
+  requests:
+    cpu: "25m"
+    memory: "128Mi"
+  limits:
+    cpu: "25m"
+    memory: "128Mi"
+
+createCert: false
+secret:
+  enabled: false
+
+volumeClaimTemplate:
+  storageClassName: elasticsearch-gp3
+
+secretMounts:
+  - name: elasticsearch-tls
+    secretName: elasticsearch-tls
+    path: /usr/share/elasticsearch/config/certs
+
+extraEnvs:
+  - name: ELASTIC_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: elasticsearch-credentials
+        key: password
+
+esConfig:
+  elasticsearch.yml: |
+    xpack.security.enabled: true
+    xpack.security.autoconfiguration.enabled: false
+    xpack.security.transport.ssl.enabled: true
+    xpack.security.transport.ssl.client_authentication: required
+    xpack.security.transport.ssl.verification_mode: certificate
+    xpack.security.transport.ssl.certificate_authorities: [certs/ca.crt]
+    xpack.security.transport.ssl.certificate: certs/tls.crt
+    xpack.security.transport.ssl.key: certs/tls.key
+    xpack.security.http.ssl.enabled: true
+    xpack.security.http.ssl.certificate: certs/tls.crt
+    xpack.security.http.ssl.key: certs/tls.key
+
+protocol: https
+
+# 마스터 노드가 한 대라 복제 샤드가 미할당된 yellow 상태도 허용합니다.
+clusterHealthCheckParams: "wait_for_status=yellow&timeout=1s"

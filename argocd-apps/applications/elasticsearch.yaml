@@ -1,0 +1,44 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: elasticsearch-master
+  namespace: argocd
+spec:
+  project: default
+  sources:
+    - repoURL: https://helm.elastic.co
+      chart: elasticsearch
+      targetRevision: "8.5.1"
+      helm:
+        releaseName: elasticsearch-master
+        valueFiles:
+          - $values/addons/es/master-node-values.yaml
+    - repoURL: https://github.com/100-hours-a-week/KTB4-14th-Cloud.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    # 기존 ResourceQuota를 사용하는 네임스페이스로 두 Application을 함께 맞춥니다.
+    namespace: elasticsearch
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: elasticsearch-data
+  namespace: argocd
+spec:
+  project: default
+  sources:
+    - repoURL: https://helm.elastic.co
+      chart: elasticsearch
+      targetRevision: "8.5.1"
+      helm:
+        releaseName: elasticsearch-data
+        valueFiles:
+          - $values/addons/es/data-node-values.yaml
+    - repoURL: https://github.com/100-hours-a-week/KTB4-14th-Cloud.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: elasticsearch

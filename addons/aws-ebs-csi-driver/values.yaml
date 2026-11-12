@@ -1,0 +1,16 @@
+# 기존 인프라 노드의 EC2 인스턴스 프로파일로 AWS에 인증합니다.
+awsAccessSecret: null
+
+controller:
+  region: ap-northeast-2
+  replicaCount: 1
+  nodeSelector:
+    node-role.kubernetes.io/infra: ""
+  tolerations:
+    - key: node-role.kubernetes.io/infra
+      operator: Exists
+      effect: NoSchedule
+
+node:
+  hostNetwork: true
+  enableWindows: false
