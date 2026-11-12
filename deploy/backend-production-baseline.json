@@ -2,53 +2,53 @@
   "schema_version": 1,
   "deployments": {
     "auth-api": {
-      "source_sha": "447cc15f4034cff88174cc0ad33a6df94bc17d85",
-      "image_digest": "sha256:819d76834395ba8b921405fa1bf26880c1a18cafc8ff425cb6ca7e8741f15b17",
-      "confirmed_by": "김태남",
-      "confirmed_at": "2026-11-09T05:00:00Z",
-      "evidence": "김태남이 audigo-cp-1에서 운영 Pod 7개를 조회하여 모두 Ready=true, 삭제 진행 없음 및 지정 이미지 digest를 확인함. BE 버전 2.4.1의 SHA와 digest는 빌드 로그에서 확인함: https://github.com/100-hours-a-week/KTB4-14th-BE/actions/runs/42176952270/job/127757503199. 기능 테스트는 이번 확인 범위에 포함되지 않음."
+      "source_sha": "f6dbcb95c7e89c95dd413e8851d039ea31a480bb",
+      "image_digest": "sha256:4266dd856251eae6e2a04b32786e8a78326e5012bce93da0beb309c588de8da7",
+      "confirmed_by": "kim-tea-nam",
+      "confirmed_at": "2026-11-12T10:36:34Z",
+      "evidence": "{\"candidate\": {\"image_digest\": \"sha256:4266dd856251eae6e2a04b32786e8a78326e5012bce93da0beb309c588de8da7\", \"image_repository\": \"mingkiboo/audigo-backend\", \"image_tag\": \"sha-f6dbcb95c7e89c95dd413e8851d039ea31a480bb\", \"platform\": \"linux/arm64\", \"schema_version\": 1, \"source_ref\": \"refs/heads/main\", \"source_repository\": \"100-hours-a-week/KTB4-14th-BE\", \"source_sha\": \"f6dbcb95c7e89c95dd413e8851d039ea31a480bb\", \"workflow_run_attempt\": \"2\", \"workflow_run_id\": \"42583227230\", \"workflow_run_url\": \"https://github.com/100-hours-a-week/KTB4-14th-BE/actions/runs/42583227230/attempts/2\"}, \"confirmation\": \"operator_dispatch\", \"promotion_pr\": 83}"
     },
     "chat-api": {
-      "source_sha": "447cc15f4034cff88174cc0ad33a6df94bc17d85",
-      "image_digest": "sha256:819d76834395ba8b921405fa1bf26880c1a18cafc8ff425cb6ca7e8741f15b17",
-      "confirmed_by": "김태남",
-      "confirmed_at": "2026-11-09T05:00:00Z",
-      "evidence": "김태남이 audigo-cp-1에서 운영 Pod 7개를 조회하여 모두 Ready=true, 삭제 진행 없음 및 지정 이미지 digest를 확인함. BE 버전 2.4.1의 SHA와 digest는 빌드 로그에서 확인함: https://github.com/100-hours-a-week/KTB4-14th-BE/actions/runs/42176952270/job/127757503199. 기능 테스트는 이번 확인 범위에 포함되지 않음."
+      "source_sha": "f6dbcb95c7e89c95dd413e8851d039ea31a480bb",
+      "image_digest": "sha256:4266dd856251eae6e2a04b32786e8a78326e5012bce93da0beb309c588de8da7",
+      "confirmed_by": "kim-tea-nam",
+      "confirmed_at": "2026-11-12T10:36:34Z",
+      "evidence": "{\"candidate\": {\"image_digest\": \"sha256:4266dd856251eae6e2a04b32786e8a78326e5012bce93da0beb309c588de8da7\", \"image_repository\": \"mingkiboo/audigo-backend\", \"image_tag\": \"sha-f6dbcb95c7e89c95dd413e8851d039ea31a480bb\", \"platform\": \"linux/arm64\", \"schema_version\": 1, \"source_ref\": \"refs/heads/main\", \"source_repository\": \"100-hours-a-week/KTB4-14th-BE\", \"source_sha\": \"f6dbcb95c7e89c95dd413e8851d039ea31a480bb\", \"workflow_run_attempt\": \"2\", \"workflow_run_id\": \"42583227230\", \"workflow_run_url\": \"https://github.com/100-hours-a-week/KTB4-14th-BE/actions/runs/42583227230/attempts/2\"}, \"confirmation\": \"operator_dispatch\", \"promotion_pr\": 83}"
     },
     "chat-ws": {
-      "source_sha": "447cc15f4034cff88174cc0ad33a6df94bc17d85",
-      "image_digest": "sha256:819d76834395ba8b921405fa1bf26880c1a18cafc8ff425cb6ca7e8741f15b17",
-      "confirmed_by": "김태남",
-      "confirmed_at": "2026-11-09T05:00:00Z",
-      "evidence": "김태남이 audigo-cp-1에서 운영 Pod 7개를 조회하여 모두 Ready=true, 삭제 진행 없음 및 지정 이미지 digest를 확인함. BE 버전 2.4.1의 SHA와 digest는 빌드 로그에서 확인함: https://github.com/100-hours-a-week/KTB4-14th-BE/actions/runs/42176952270/job/127757503199. 기능 테스트는 이번 확인 범위에 포함되지 않음."
+      "source_sha": "f6dbcb95c7e89c95dd413e8851d039ea31a480bb",
+      "image_digest": "sha256:4266dd856251eae6e2a04b32786e8a78326e5012bce93da0beb309c588de8da7",
+      "confirmed_by": "kim-tea-nam",
+      "confirmed_at": "2026-11-12T10:36:34Z",
+      "evidence": "{\"candidate\": {\"image_digest\": \"sha256:4266dd856251eae6e2a04b32786e8a78326e5012bce93da0beb309c588de8da7\", \"image_repository\": \"mingkiboo/audigo-backend\", \"image_tag\": \"sha-f6dbcb95c7e89c95dd413e8851d039ea31a480bb\", \"platform\": \"linux/arm64\", \"schema_version\": 1, \"source_ref\": \"refs/heads/main\", \"source_repository\": \"100-hours-a-week/KTB4-14th-BE\", \"source_sha\": \"f6dbcb95c7e89c95dd413e8851d039ea31a480bb\", \"workflow_run_attempt\": \"2\", \"workflow_run_id\": \"42583227230\", \"workflow_run_url\": \"https://github.com/100-hours-a-week/KTB4-14th-BE/actions/runs/42583227230/attempts/2\"}, \"confirmation\": \"operator_dispatch\", \"promotion_pr\": 83}"
     },
     "travel-api": {
-      "source_sha": "447cc15f4034cff88174cc0ad33a6df94bc17d85",
-      "image_digest": "sha256:819d76834395ba8b921405fa1bf26880c1a18cafc8ff425cb6ca7e8741f15b17",
-      "confirmed_by": "김태남",
-      "confirmed_at": "2026-11-09T05:00:00Z",
-      "evidence": "김태남이 audigo-cp-1에서 운영 Pod 7개를 조회하여 모두 Ready=true, 삭제 진행 없음 및 지정 이미지 digest를 확인함. BE 버전 2.4.1의 SHA와 digest는 빌드 로그에서 확인함: https://github.com/100-hours-a-week/KTB4-14th-BE/actions/runs/42176952270/job/127757503199. 기능 테스트는 이번 확인 범위에 포함되지 않음."
+      "source_sha": "f6dbcb95c7e89c95dd413e8851d039ea31a480bb",
+      "image_digest": "sha256:4266dd856251eae6e2a04b32786e8a78326e5012bce93da0beb309c588de8da7",
+      "confirmed_by": "kim-tea-nam",
+      "confirmed_at": "2026-11-12T10:36:34Z",
+      "evidence": "{\"candidate\": {\"image_digest\": \"sha256:4266dd856251eae6e2a04b32786e8a78326e5012bce93da0beb309c588de8da7\", \"image_repository\": \"mingkiboo/audigo-backend\", \"image_tag\": \"sha-f6dbcb95c7e89c95dd413e8851d039ea31a480bb\", \"platform\": \"linux/arm64\", \"schema_version\": 1, \"source_ref\": \"refs/heads/main\", \"source_repository\": \"100-hours-a-week/KTB4-14th-BE\", \"source_sha\": \"f6dbcb95c7e89c95dd413e8851d039ea31a480bb\", \"workflow_run_attempt\": \"2\", \"workflow_run_id\": \"42583227230\", \"workflow_run_url\": \"https://github.com/100-hours-a-week/KTB4-14th-BE/actions/runs/42583227230/attempts/2\"}, \"confirmation\": \"operator_dispatch\", \"promotion_pr\": 83}"
     },
     "travel-worker": {
-      "source_sha": "447cc15f4034cff88174cc0ad33a6df94bc17d85",
-      "image_digest": "sha256:819d76834395ba8b921405fa1bf26880c1a18cafc8ff425cb6ca7e8741f15b17",
-      "confirmed_by": "김태남",
-      "confirmed_at": "2026-11-09T05:00:00Z",
-      "evidence": "김태남이 audigo-cp-1에서 운영 Pod 7개를 조회하여 모두 Ready=true, 삭제 진행 없음 및 지정 이미지 digest를 확인함. BE 버전 2.4.1의 SHA와 digest는 빌드 로그에서 확인함: https://github.com/100-hours-a-week/KTB4-14th-BE/actions/runs/42176952270/job/127757503199. 기능 테스트는 이번 확인 범위에 포함되지 않음."
+      "source_sha": "f6dbcb95c7e89c95dd413e8851d039ea31a480bb",
+      "image_digest": "sha256:4266dd856251eae6e2a04b32786e8a78326e5012bce93da0beb309c588de8da7",
+      "confirmed_by": "kim-tea-nam",
+      "confirmed_at": "2026-11-12T10:36:34Z",
+      "evidence": "{\"candidate\": {\"image_digest\": \"sha256:4266dd856251eae6e2a04b32786e8a78326e5012bce93da0beb309c588de8da7\", \"image_repository\": \"mingkiboo/audigo-backend\", \"image_tag\": \"sha-f6dbcb95c7e89c95dd413e8851d039ea31a480bb\", \"platform\": \"linux/arm64\", \"schema_version\": 1, \"source_ref\": \"refs/heads/main\", \"source_repository\": \"100-hours-a-week/KTB4-14th-BE\", \"source_sha\": \"f6dbcb95c7e89c95dd413e8851d039ea31a480bb\", \"workflow_run_attempt\": \"2\", \"workflow_run_id\": \"42583227230\", \"workflow_run_url\": \"https://github.com/100-hours-a-week/KTB4-14th-BE/actions/runs/42583227230/attempts/2\"}, \"confirmation\": \"operator_dispatch\", \"promotion_pr\": 83}"
     },
     "general-api": {
-      "source_sha": "447cc15f4034cff88174cc0ad33a6df94bc17d85",
-      "image_digest": "sha256:819d76834395ba8b921405fa1bf26880c1a18cafc8ff425cb6ca7e8741f15b17",
-      "confirmed_by": "김태남",
-      "confirmed_at": "2026-11-09T05:00:00Z",
-      "evidence": "김태남이 audigo-cp-1에서 운영 Pod 7개를 조회하여 모두 Ready=true, 삭제 진행 없음 및 지정 이미지 digest를 확인함. BE 버전 2.4.1의 SHA와 digest는 빌드 로그에서 확인함: https://github.com/100-hours-a-week/KTB4-14th-BE/actions/runs/42176952270/job/127757503199. 기능 테스트는 이번 확인 범위에 포함되지 않음."
+      "source_sha": "f6dbcb95c7e89c95dd413e8851d039ea31a480bb",
+      "image_digest": "sha256:4266dd856251eae6e2a04b32786e8a78326e5012bce93da0beb309c588de8da7",
+      "confirmed_by": "kim-tea-nam",
+      "confirmed_at": "2026-11-12T10:36:34Z",
+      "evidence": "{\"candidate\": {\"image_digest\": \"sha256:4266dd856251eae6e2a04b32786e8a78326e5012bce93da0beb309c588de8da7\", \"image_repository\": \"mingkiboo/audigo-backend\", \"image_tag\": \"sha-f6dbcb95c7e89c95dd413e8851d039ea31a480bb\", \"platform\": \"linux/arm64\", \"schema_version\": 1, \"source_ref\": \"refs/heads/main\", \"source_repository\": \"100-hours-a-week/KTB4-14th-BE\", \"source_sha\": \"f6dbcb95c7e89c95dd413e8851d039ea31a480bb\", \"workflow_run_attempt\": \"2\", \"workflow_run_id\": \"42583227230\", \"workflow_run_url\": \"https://github.com/100-hours-a-week/KTB4-14th-BE/actions/runs/42583227230/attempts/2\"}, \"confirmation\": \"operator_dispatch\", \"promotion_pr\": 83}"
     },
     "general-ws": {
-      "source_sha": "447cc15f4034cff88174cc0ad33a6df94bc17d85",
-      "image_digest": "sha256:819d76834395ba8b921405fa1bf26880c1a18cafc8ff425cb6ca7e8741f15b17",
-      "confirmed_by": "김태남",
-      "confirmed_at": "2026-11-09T05:00:00Z",
-      "evidence": "김태남이 audigo-cp-1에서 운영 Pod 7개를 조회하여 모두 Ready=true, 삭제 진행 없음 및 지정 이미지 digest를 확인함. BE 버전 2.4.1의 SHA와 digest는 빌드 로그에서 확인함: https://github.com/100-hours-a-week/KTB4-14th-BE/actions/runs/42176952270/job/127757503199. 기능 테스트는 이번 확인 범위에 포함되지 않음."
+      "source_sha": "f6dbcb95c7e89c95dd413e8851d039ea31a480bb",
+      "image_digest": "sha256:4266dd856251eae6e2a04b32786e8a78326e5012bce93da0beb309c588de8da7",
+      "confirmed_by": "kim-tea-nam",
+      "confirmed_at": "2026-11-12T10:36:34Z",
+      "evidence": "{\"candidate\": {\"image_digest\": \"sha256:4266dd856251eae6e2a04b32786e8a78326e5012bce93da0beb309c588de8da7\", \"image_repository\": \"mingkiboo/audigo-backend\", \"image_tag\": \"sha-f6dbcb95c7e89c95dd413e8851d039ea31a480bb\", \"platform\": \"linux/arm64\", \"schema_version\": 1, \"source_ref\": \"refs/heads/main\", \"source_repository\": \"100-hours-a-week/KTB4-14th-BE\", \"source_sha\": \"f6dbcb95c7e89c95dd413e8851d039ea31a480bb\", \"workflow_run_attempt\": \"2\", \"workflow_run_id\": \"42583227230\", \"workflow_run_url\": \"https://github.com/100-hours-a-week/KTB4-14th-BE/actions/runs/42583227230/attempts/2\"}, \"confirmation\": \"operator_dispatch\", \"promotion_pr\": 83}"
     }
   }
 }
