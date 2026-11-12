@@ -13,7 +13,7 @@ spec:
       helm:
         releaseName: kube-prometheus-stack
         valueFiles:
-          - $values/monitoring/kube-prometheus-stack/values.yaml
+          - $values/addons/monitoring/kube-prometheus-stack/values.yaml
 
     - repoURL: https://github.com/100-hours-a-week/KTB4-14th-Cloud.git
       targetRevision: main
@@ -47,7 +47,7 @@ spec:
       helm:
         releaseName: loki
         valueFiles:
-          - $values/monitoring/loki/values.yaml
+          - $values/addons/monitoring/loki/values.yaml
 
     - repoURL: https://github.com/100-hours-a-week/KTB4-14th-Cloud.git
       targetRevision: main
@@ -81,7 +81,7 @@ spec:
       helm:
         releaseName: alloy
         valueFiles:
-          - $values/monitoring/alloy/values.yaml
+          - $values/addons/monitoring/alloy/values.yaml
 
     - repoURL: https://github.com/100-hours-a-week/KTB4-14th-Cloud.git
       targetRevision: main
@@ -115,7 +115,7 @@ spec:
       helm:
         releaseName: yace
         valueFiles:
-          - $values/monitoring/yace/values.yaml
+          - $values/addons/monitoring/yace/values.yaml
 
     - repoURL: https://github.com/100-hours-a-week/KTB4-14th-Cloud.git
       targetRevision: main
