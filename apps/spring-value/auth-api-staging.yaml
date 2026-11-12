@@ -9,9 +9,9 @@ replicaCount: 1
 
 image:
   repository: mingkiboo/audigo-backend
-  digest: sha256:4266dd856251eae6e2a04b32786e8a78326e5012bce93da0beb309c588de8da7
+  digest: sha256:e80614ebfd820ca6222337df54dde2810bd31a38e5474268a734c7bbd3a7b61d
 
-  tag: sha-f6dbcb95c7e89c95dd413e8851d039ea31a480bb
+  tag: sha-aba155c7735f609f1cfb6897b3380d9145f5680a
 containerPort: 8080
 
 resources:

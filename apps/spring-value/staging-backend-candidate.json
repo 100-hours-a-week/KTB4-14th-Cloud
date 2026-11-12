@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source_repository": "100-hours-a-week/KTB4-14th-BE",
-  "source_sha": "f6dbcb95c7e89c95dd413e8851d039ea31a480bb",
+  "source_sha": "aba155c7735f609f1cfb6897b3380d9145f5680a",
   "source_ref": "refs/heads/main",
   "image_repository": "mingkiboo/audigo-backend",
-  "image_tag": "sha-f6dbcb95c7e89c95dd413e8851d039ea31a480bb",
-  "image_digest": "sha256:4266dd856251eae6e2a04b32786e8a78326e5012bce93da0beb309c588de8da7",
+  "image_tag": "sha-aba155c7735f609f1cfb6897b3380d9145f5680a",
+  "image_digest": "sha256:e80614ebfd820ca6222337df54dde2810bd31a38e5474268a734c7bbd3a7b61d",
   "platform": "linux/arm64",
-  "workflow_run_id": "42583227230",
-  "workflow_run_attempt": "2",
-  "workflow_run_url": "https://github.com/100-hours-a-week/KTB4-14th-BE/actions/runs/42583227230/attempts/2"
+  "workflow_run_id": "43183544260",
+  "workflow_run_attempt": "1",
+  "workflow_run_url": "https://github.com/100-hours-a-week/KTB4-14th-BE/actions/runs/43183544260/attempts/1"
 }
