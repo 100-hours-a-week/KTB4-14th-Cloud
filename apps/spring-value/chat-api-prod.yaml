@@ -52,6 +52,8 @@ configMap:
     AUDIGO_AI_JOB_QUEUE_URL: "https://sqs.ap-northeast-2.amazonaws.com/185489190599/Audigo-AI-Job-Queue"
     AUDIGO_AI_RESULT_QUEUE_URL: "https://sqs.ap-northeast-2.amazonaws.com/185489190599/Audigo-AI-Result-Queue"
 
+    ELASTICSEARCH_URL: "https://elasticsearch-data.elasticsearch.svc.cluster.local:9200"
+
     MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "health,prometheus"
     SERVER_TOMCAT_MBEANREGISTRY_ENABLED: "true"
 
@@ -62,11 +64,14 @@ externalSecret:
 reloader:
   existingSecretNames:
     - backend-secrets
+    - chat-api-elasticsearch
 
 # 같은 Namespace의 기존 Secret 연결
 envFrom:
   - secretRef:
       name: backend-secrets
+  - secretRef:
+      name: chat-api-elasticsearch
 
 service:
   type: NodePort
