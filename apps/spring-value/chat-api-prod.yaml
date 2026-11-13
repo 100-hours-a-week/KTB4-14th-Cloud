@@ -67,6 +67,7 @@ configMap:
     AUDIGO_CHAT_SEARCH_SYNC_TARGET_INDEX: "chat-messages-prod-v1"
     AUDIGO_CHAT_SEARCH_SYNC_TARGET_GENERATION: "prod-v1"
     AUDIGO_CHAT_ES_URL: "https://elasticsearch-data.elasticsearch.svc.cluster.local:9200"
+    AUDIGO_CHAT_ES_USERNAME: elastic
 
 # 기존 ESO 리소스를 재사용하므로 차트에서 새로 생성하지 않음
 externalSecret:
