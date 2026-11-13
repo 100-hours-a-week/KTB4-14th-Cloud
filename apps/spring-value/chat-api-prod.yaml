@@ -61,7 +61,7 @@ configMap:
     AUDIGO_CHAT_SEARCH_SYNC_RECORD_ENABLED: true
     AUDIGO_CHAT_SEARCH_SYNC_WORKER_ENABLED: true
     AUDIGO_CHAT_MESSAGE_SEARCH_MODE: es
-
+    SPRING_PROFILES_ACTIVE: "prod, search-server"
 
 # 기존 ESO 리소스를 재사용하므로 차트에서 새로 생성하지 않음
 externalSecret:
